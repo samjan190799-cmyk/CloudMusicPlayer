@@ -19,10 +19,13 @@ class YouTubeService: ObservableObject {
     
     // Список рабочих публичных инстансов Invidious для переключения в случае ошибок
     private let apiInstances = [
-        "https://yewtu.be",
-        "https://invidious.nerd.cyber.goth",
-        "https://invidious.flokinet.to",
-        "https://inv.tux.im"
+        "https://yt.chocolatemoo53.com",
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.f5.si",
+        "https://invidious.tiekoetter.com",
+        "https://inv.zoomerville.com",
+        "https://yewtu.be"
     ]
     
     private var activeInstanceIndex = 0
