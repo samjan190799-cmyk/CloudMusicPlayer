@@ -16,6 +16,10 @@ class YouTubeService: ObservableObject {
     @Published var tracks: [YouTubeTrack] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var canLoadMore = false
+    
+    private var currentQuery = ""
+    private var currentPage = 1
     
     // Список рабочих публичных инстансов Invidious для переключения в случае ошибок
     private let apiInstances = [
@@ -46,15 +50,28 @@ class YouTubeService: ObservableObject {
     func search(query: String) {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
+        self.currentQuery = query
+        self.currentPage = 1
+        self.canLoadMore = false
         self.isLoading = true
         self.errorMessage = nil
         
-        performSearchRequest(query: query, retryCount: 0)
+        performSearchRequest(query: query, page: 1, retryCount: 0)
     }
     
-    private func performSearchRequest(query: String, retryCount: Int) {
+    /// Загрузка следующей страницы результатов
+    func loadMore() {
+        guard !isLoading && !currentQuery.isEmpty && canLoadMore else { return }
+        
+        self.isLoading = true
+        let nextPage = currentPage + 1
+        
+        performSearchRequest(query: currentQuery, page: nextPage, retryCount: 0)
+    }
+    
+    private func performSearchRequest(query: String, page: Int, retryCount: Int) {
         let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "\(currentInstance)/api/v1/search?q=\(encodedQuery)&type=video"
+        let urlString = "\(currentInstance)/api/v1/search?q=\(encodedQuery)&type=video&page=\(page)"
         
         guard let url = URL(string: urlString) else {
             self.isLoading = false
@@ -67,19 +84,19 @@ class YouTubeService: ObservableObject {
             
             if let error = error {
                 print("Ошибка запроса к \(self.currentInstance): \(error.localizedDescription)")
-                self.handleSearchFailure(query: query, retryCount: retryCount, errorMsg: error.localizedDescription)
+                self.handleSearchFailure(query: query, page: page, retryCount: retryCount, errorMsg: error.localizedDescription)
                 return
             }
             
             guard let data = data else {
-                self.handleSearchFailure(query: query, retryCount: retryCount, errorMsg: "Пустой ответ сервера")
+                self.handleSearchFailure(query: query, page: page, retryCount: retryCount, errorMsg: "Пустой ответ сервера")
                 return
             }
             
             do {
                 let items = try JSONDecoder().decode([InvidiousSearchResult].self, from: data)
                 DispatchQueue.main.async {
-                    self.tracks = items.map { item in
+                    let newTracks = items.map { item in
                         YouTubeTrack(
                             id: item.videoId,
                             title: item.title,
@@ -88,19 +105,26 @@ class YouTubeService: ObservableObject {
                             thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/hqdefault.jpg"
                         )
                     }
+                    if page == 1 {
+                        self.tracks = newTracks
+                    } else {
+                        self.tracks.append(contentsOf: newTracks)
+                    }
+                    self.currentPage = page
+                    self.canLoadMore = !newTracks.isEmpty && newTracks.count >= 15
                     self.isLoading = false
                 }
             } catch {
                 print("Ошибка парсинга ответа от \(self.currentInstance): \(error.localizedDescription)")
-                self.handleSearchFailure(query: query, retryCount: retryCount, errorMsg: "Ошибка декодирования результатов")
+                self.handleSearchFailure(query: query, page: page, retryCount: retryCount, errorMsg: "Ошибка декодирования результатов")
             }
         }.resume()
     }
     
-    private func handleSearchFailure(query: String, retryCount: Int, errorMsg: String) {
+    private func handleSearchFailure(query: String, page: Int, retryCount: Int, errorMsg: String) {
         if retryCount < apiInstances.count - 1 {
             switchToNextInstance()
-            performSearchRequest(query: query, retryCount: retryCount + 1)
+            performSearchRequest(query: query, page: page, retryCount: retryCount + 1)
         } else {
             DispatchQueue.main.async {
                 self.isLoading = false

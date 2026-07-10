@@ -99,6 +99,27 @@ struct YouTubeView: View {
                             ForEach(service.tracks) { track in
                                 trackRow(track: track)
                             }
+                            
+                            if service.canLoadMore {
+                                Button(action: {
+                                    service.loadMore()
+                                }) {
+                                    HStack {
+                                        Spacer()
+                                        if service.isLoading {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .red))
+                                        } else {
+                                            Text("Загрузить еще...")
+                                                .foregroundColor(.cyan)
+                                                .fontWeight(.bold)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 12)
+                                }
+                                .listRowBackground(Color.clear)
+                            }
                         }
                         .listStyle(PlainListStyle())
                         .background(Color.clear)
