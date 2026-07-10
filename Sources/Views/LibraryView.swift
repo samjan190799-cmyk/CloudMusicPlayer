@@ -175,13 +175,13 @@ struct LibraryView: View {
                                 Button(action: {
                                     selectedTrackForPlaylist = localTrack.toPlaylistTrack()
                                 }) {
-                                    Label("Добавить в плейлист", systemName: "music.note.list")
+                                    Label("Добавить в плейлист", systemImage: "music.note.list")
                                 }
                                 
                                 Button(role: .destructive, action: {
                                     deleteTrack(localTrack)
                                 }) {
-                                    Label("Удалить из медиатеки", systemName: "trash")
+                                    Label("Удалить из медиатеки", systemImage: "trash")
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
@@ -202,7 +202,7 @@ struct LibraryView: View {
                             Button(role: .destructive) {
                                 deleteTrack(localTrack)
                             } label: {
-                                Label("Удалить", systemName: "trash")
+                                Label("Удалить", systemImage: "trash")
                             }
                         }
                     }
@@ -275,7 +275,7 @@ struct LibraryView: View {
                             Button(role: .destructive) {
                                 playlistManager.deletePlaylist(id: playlist.id)
                             } label: {
-                                Label("Удалить", systemName: "trash")
+                                Label("Удалить", systemImage: "trash")
                             }
                         }
                     }

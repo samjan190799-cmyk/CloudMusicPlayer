@@ -247,7 +247,7 @@ struct CloudView: View {
                 Button(action: {
                     selectedTrackForPlaylist = sourceTrack.toPlaylistTrack()
                 }) {
-                    Label("Добавить в плейлист", systemName: "music.note.list")
+                    Label("Добавить в плейлист", systemImage: "music.note.list")
                 }
             } label: {
                 Image(systemName: "ellipsis")

@@ -28,31 +28,31 @@ struct ContentView: View {
             TabView(selection: $selectedTab) {
                 LibraryView()
                     .tabItem {
-                        Label("Медиатека", systemName: "folder.fill")
+                        Label("Медиатека", systemImage: "folder.fill")
                     }
                     .tag(0)
                 
                 CloudView(source: .google, selectedTab: $selectedTab)
                     .tabItem {
-                        Label("Google Диск", systemName: "cloud.fill")
+                        Label("Google Диск", systemImage: "cloud.fill")
                     }
                     .tag(1)
                 
                 CloudView(source: .yandex, selectedTab: $selectedTab)
                     .tabItem {
-                        Label("Яндекс Диск", systemName: "icloud.fill")
+                        Label("Яндекс Диск", systemImage: "icloud.fill")
                     }
                     .tag(2)
                 
                 YouTubeView()
                     .tabItem {
-                        Label("YouTube", systemName: "play.rectangle.fill")
+                        Label("YouTube", systemImage: "play.rectangle.fill")
                     }
                     .tag(3)
                 
                 SettingsView()
                     .tabItem {
-                        Label("Настройки", systemName: "gearshape.fill")
+                        Label("Настройки", systemImage: "gearshape.fill")
                     }
                     .tag(4)
             }

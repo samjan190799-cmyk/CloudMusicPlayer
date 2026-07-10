@@ -132,7 +132,7 @@ struct PlaylistDetailView: View {
                                 Button(role: .destructive) {
                                     playlistManager.removeTrack(trackId: playlistTrack.id, from: currentPlaylist.id)
                                 } label: {
-                                    Label("Удалить", systemName: "trash")
+                                    Label("Удалить", systemImage: "trash")
                                 }
                             }
                         }

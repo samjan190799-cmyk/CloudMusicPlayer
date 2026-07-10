@@ -180,7 +180,7 @@ struct YouTubeView: View {
                 Button(action: {
                     selectedTrackForPlaylist = track.toPlaylistTrack()
                 }) {
-                    Label("Добавить в плейлист", systemName: "music.note.list")
+                    Label("Добавить в плейлист", systemImage: "music.note.list")
                 }
             } label: {
                 Image(systemName: "ellipsis")
