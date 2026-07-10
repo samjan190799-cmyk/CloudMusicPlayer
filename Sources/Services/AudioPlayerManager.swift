@@ -352,6 +352,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
         player = AVPlayer(playerItem: item)
         player?.volume = volume
         player?.isMuted = isMuted
+        player?.automaticallyWaitsToMinimizeStalling = false
         
         // Наблюдатели за окончанием трека и изменением статуса
         NotificationCenter.default.addObserver(

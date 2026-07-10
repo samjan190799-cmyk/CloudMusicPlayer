@@ -145,7 +145,7 @@ class YouTubeService: ObservableObject {
         Task {
             do {
                 print("YouTubeKit: запрос потоков для видео \(videoId)...")
-                let video = YouTube(videoID: videoId, methods: [.local, .remote])
+                let video = YouTube(videoID: videoId, methods: [.remote, .local])
                 let streams = try await video.streams
                 
                 print("YouTubeKit: получено \(streams.count) потоков")
