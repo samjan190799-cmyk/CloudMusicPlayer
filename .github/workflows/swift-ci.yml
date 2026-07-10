@@ -1,23 +1,101 @@
-name: iOS Swift CI
+name: Build CloudMusicPlayer iOS IPA
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
+    name: Build Unsigned IPA
     runs-on: macos-14
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Select Latest Xcode
-      run: |
-        LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
-        echo "Using: $LATEST_XCODE"
-        sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
-        xcodebuild -version
-    - name: Build Package
-      run: xcodebuild build -scheme CloudMusicPlayer -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
+      - name: Cache Homebrew
+        id: cache-homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar
+            /opt/homebrew/bin/xcodegen
+          key: ${{ runner.os }}-homebrew-xcodegen
 
+      - name: Install XcodeGen
+        if: steps.cache-homebrew.outputs.cache-hit != 'true'
+        run: |
+          brew update
+          brew install xcodegen
+
+      - name: Select Latest Xcode
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
+          echo "Using: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Generate Xcode Project
+        run: |
+          xcodegen generate
+
+      - name: Build for iOS Device (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CloudMusicPlayer.xcodeproj \
+            -scheme CloudMusicPlayer \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            VALIDATE_PRODUCT=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            SWIFT_OPTIMIZATION_LEVEL="-O" \
+            build 2>&1
+
+      - name: Package as IPA
+        run: |
+          mkdir -p build/Payload
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -1)
+          echo "App path: $APP_PATH"
+          cp -r "$APP_PATH" build/Payload/CloudMusicPlayer.app
+          cd build
+          zip -r CloudMusicPlayer.ipa Payload/
+          echo "IPA size: $(du -h CloudMusicPlayer.ipa | cut -f1)"
+
+      - name: Upload IPA as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudMusicPlayer-Unsigned-IPA
+          path: build/CloudMusicPlayer.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "CloudMusicPlayer v1.0 (Build ${{ github.run_number }})"
+          body: |
+            ## CloudMusicPlayer iOS IPA
+
+            **Как установить через AltStore:**
+            1. Скачай `CloudMusicPlayer.ipa` ниже
+            2. Открой AltStore на iPhone → "My Apps" → "+" → выбери IPA
+            3. Готово!
+          files: build/CloudMusicPlayer.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
