@@ -156,7 +156,8 @@ class YouTubeService: ObservableObject {
                 
                 // Логируем все доступные аудио потоки для диагностики
                 for (i, stream) in audioOnly.enumerated() {
-                    print("  [\(i)] ext=\(stream.fileExtension.rawValue), codec=\(stream.audioCodec?.rawValue ?? "nil"), bitrate=\(stream.bitrate ?? 0)")
+                    let codecStr = stream.audioCodec.map { String(describing: $0) } ?? "nil"
+                    print("  [\(i)] ext=\(stream.fileExtension.rawValue), codec=\(codecStr), bitrate=\(stream.bitrate ?? 0)")
                 }
                 
                 // ПРИОРИТЕТ 1: Ищем M4A (AAC) — единственный формат, который AVPlayer поддерживает
