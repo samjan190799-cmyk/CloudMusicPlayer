@@ -144,29 +144,57 @@ class YouTubeService: ObservableObject {
     func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         Task {
             do {
-                let video = YouTube(videoID: videoId)
+                print("YouTubeKit: запрос потоков для видео \(videoId)...")
+                let video = YouTube(videoID: videoId, methods: [.local, .remote])
                 let streams = try await video.streams
                 
-                // Сначала пробуем получить только аудио потоки
+                print("YouTubeKit: получено \(streams.count) потоков")
+                
+                // Получаем только аудио потоки
                 let audioOnly = streams.filterAudioOnly()
+                print("YouTubeKit: аудио-потоков: \(audioOnly.count)")
                 
-                if let bestAudio = audioOnly.highestAudioBitrateStream() {
-                    completion(bestAudio.url)
+                // Логируем все доступные аудио потоки для диагностики
+                for (i, stream) in audioOnly.enumerated() {
+                    print("  [\(i)] ext=\(stream.fileExtension.rawValue), codec=\(stream.audioCodec?.rawValue ?? "nil"), bitrate=\(stream.bitrate ?? 0)")
+                }
+                
+                // ПРИОРИТЕТ 1: Ищем M4A (AAC) — единственный формат, который AVPlayer поддерживает
+                let m4aStreams = audioOnly.filter { $0.fileExtension == .m4a }
+                if let bestM4A = m4aStreams.highestAudioBitrateStream() {
+                    print("YouTubeKit: выбран M4A поток, bitrate=\(bestM4A.bitrate ?? 0), url=\(bestM4A.url.absoluteString.prefix(80))...")
+                    DispatchQueue.main.async { completion(bestM4A.url) }
                     return
                 }
                 
-                // Если аудио-потоков нет, пробуем комбинированные (видео+аудио)
-                let combined = streams.filterVideoAndAudio()
+                // ПРИОРИТЕТ 2: MP4 аудио
+                let mp4Streams = audioOnly.filter { $0.fileExtension == .mp4 }
+                if let bestMP4 = mp4Streams.highestAudioBitrateStream() {
+                    print("YouTubeKit: выбран MP4 аудио поток, bitrate=\(bestMP4.bitrate ?? 0)")
+                    DispatchQueue.main.async { completion(bestMP4.url) }
+                    return
+                }
+                
+                // ПРИОРИТЕТ 3: Любой комбинированный поток MP4 (видео+аудио)
+                let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
                 if let fallback = combined.first {
-                    completion(fallback.url)
+                    print("YouTubeKit: используем комбинированный MP4 поток (видео+аудио)")
+                    DispatchQueue.main.async { completion(fallback.url) }
                     return
                 }
                 
-                print("YouTubeKit: нет доступных аудиопотоков для видео \(videoId)")
-                completion(nil)
+                // ПРИОРИТЕТ 4: Любой аудио поток (последний шанс, может не воспроизводиться)
+                if let anyAudio = audioOnly.highestAudioBitrateStream() {
+                    print("YouTubeKit: ПРЕДУПРЕЖДЕНИЕ — используем \(anyAudio.fileExtension.rawValue) поток (может не работать с AVPlayer)")
+                    DispatchQueue.main.async { completion(anyAudio.url) }
+                    return
+                }
+                
+                print("YouTubeKit: НЕТ доступных аудиопотоков для видео \(videoId)")
+                DispatchQueue.main.async { completion(nil) }
             } catch {
-                print("YouTubeKit ошибка для видео \(videoId): \(error.localizedDescription)")
-                completion(nil)
+                print("YouTubeKit ОШИБКА для видео \(videoId): \(error)")
+                DispatchQueue.main.async { completion(nil) }
             }
         }
     }

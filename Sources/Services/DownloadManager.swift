@@ -149,7 +149,9 @@ class DownloadManager: NSObject, ObservableObject {
                 return
             }
             
-            let request = URLRequest(url: audioUrl)
+            var request = URLRequest(url: audioUrl)
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+            request.setValue("https://www.youtube.com/", forHTTPHeaderField: "Referer")
             self?.startDownload(trackId: trackId, title: track.title, source: .youtube, request: request, size: 0)
         }
     }

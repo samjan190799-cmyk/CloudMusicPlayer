@@ -267,21 +267,27 @@ class AudioPlayerManager: NSObject, ObservableObject {
             }
             return
         }
-        // 6. Стриминг с YouTube (получение ссылки на ходу через Invidious API)
+        // 6. Стриминг с YouTube (получение ссылки на ходу через YouTubeKit)
         else if track.sourceName.contains("YouTube") {
+            print("AudioPlayer: запрос аудио URL для YouTube трека: \(track.id) — \(track.title)")
             YouTubeService.shared.getAudioURL(for: track.id) { [weak self] audioUrl in
-                guard let audioUrl = audioUrl else {
-                    DispatchQueue.main.async {
-                        self?.playbackState = .stopped
-                    }
-                    return
-                }
-                DispatchQueue.main.async {
-                    let item = AVPlayerItem(url: audioUrl)
+                if let audioUrl = audioUrl {
+                    print("AudioPlayer: получен аудио URL: \(audioUrl.absoluteString.prefix(100))...")
+                    
+                    let headers = [
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                        "Referer": "https://www.youtube.com/"
+                    ]
+                    let asset = AVURLAsset(url: audioUrl, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+                    let item = AVPlayerItem(asset: asset)
+                    
                     self?.setupPlayer(with: item, track: track)
                     
                     // Запуск автоматического кэширования в фоне
                     self?.triggerCaching(for: track)
+                } else {
+                    print("AudioPlayer: ОШИБКА — не удалось получить аудио URL для YouTube трека \(track.id)")
+                    self?.playbackState = .stopped
                 }
             }
             return
