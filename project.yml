@@ -1,6 +1,10 @@
 name: CloudMusicPlayer
 options:
   bundleIdPrefix: com.samvel.cloudmusicplayer
+packages:
+  YouTubeKit:
+    url: https://github.com/alexeichhorn/YouTubeKit
+    from: "0.3.0"
 targets:
   CloudMusicPlayer:
     type: application
@@ -8,6 +12,8 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: Sources
+    dependencies:
+      - package: YouTubeKit
     info:
       path: Sources/Info.plist
       properties:
@@ -35,3 +41,4 @@ targets:
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGNING_ALLOWED: "NO"
         GENERATE_INFOPLIST_FILE: "NO"
+

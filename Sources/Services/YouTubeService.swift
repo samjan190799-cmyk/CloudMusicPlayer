@@ -1,4 +1,5 @@
 import Foundation
+import YouTubeKit
 
 /// Модель трека с YouTube
 struct YouTubeTrack: Identifiable, Codable {
@@ -22,6 +23,8 @@ class YouTubeService: ObservableObject {
     private var currentPage = 1
     
     // Список рабочих публичных инстансов Invidious для переключения в случае ошибок
+    // Примечание: инстансы используются ТОЛЬКО для поиска видео.
+    // Получение аудиопотоков выполняется через YouTubeKit напрямую.
     private let apiInstances = [
         "https://yt.chocolatemoo53.com",
         "https://inv.nadeko.net",
@@ -133,69 +136,43 @@ class YouTubeService: ObservableObject {
         }
     }
     
-    /// Извлечение прямой ссылки на аудиопоток по ID видео
+    // MARK: - Извлечение прямой ссылки на аудиопоток через YouTubeKit
+    
+    /// Извлечение прямой ссылки на аудиопоток по ID видео.
+    /// Использует YouTubeKit — нативную Swift-библиотеку, которая извлекает URL
+    /// напрямую с серверов YouTube без посредников (Invidious/Piped).
     func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
-        performAudioURLRequest(videoId: videoId, retryCount: 0, completion: completion)
-    }
-    
-    private func performAudioURLRequest(videoId: String, retryCount: Int, completion: @escaping (URL?) -> Void) {
-        let urlString = "\(currentInstance)/api/v1/videos/\(videoId)"
-        guard let url = URL(string: urlString) else {
-            completion(nil)
-            return
-        }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let self = self else {
-                completion(nil)
-                return
-            }
-            
-            if error != nil || data == nil {
-                self.handleAudioURLFailure(videoId: videoId, retryCount: retryCount, completion: completion)
-                return
-            }
-            
+        Task {
             do {
-                let videoInfo = try JSONDecoder().decode(InvidiousVideoInfo.self, from: data!)
+                let video = YouTube(videoID: videoId)
+                let streams = try await video.streams
                 
-                // Фильтруем форматы, содержащие только аудио (audio/mp4 или audio/webm)
-                let audioFormats = videoInfo.adaptiveFormats.filter { $0.mimeType.contains("audio") }
+                // Сначала пробуем получить только аудио потоки
+                let audioOnly = streams.filterAudioOnly()
                 
-                // Предпочитаем mp4 (m4a) для лучшей совместимости с AVPlayer
-                if let bestAudio = audioFormats.first(where: { $0.mimeType.contains("mp4") }) ?? audioFormats.first {
-                    // Некоторые инстансы могут отдавать относительные ссылки, приведем их к абсолютным
-                    var absoluteUrlString = bestAudio.url
-                    if absoluteUrlString.hasPrefix("/") {
-                        absoluteUrlString = self.currentInstance + absoluteUrlString
-                    }
-                    
-                    if let url = URL(string: absoluteUrlString) {
-                        completion(url)
-                    } else {
-                        completion(nil)
-                    }
-                } else {
-                    completion(nil)
+                if let bestAudio = audioOnly.highestAudioBitrateStream() {
+                    completion(bestAudio.url)
+                    return
                 }
+                
+                // Если аудио-потоков нет, пробуем комбинированные (видео+аудио)
+                let combined = streams.filterVideoAndAudio()
+                if let fallback = combined.first {
+                    completion(fallback.url)
+                    return
+                }
+                
+                print("YouTubeKit: нет доступных аудиопотоков для видео \(videoId)")
+                completion(nil)
             } catch {
-                print("Ошибка декодирования аудиопотока от \(self.currentInstance): \(error.localizedDescription)")
-                self.handleAudioURLFailure(videoId: videoId, retryCount: retryCount, completion: completion)
+                print("YouTubeKit ошибка для видео \(videoId): \(error.localizedDescription)")
+                completion(nil)
             }
-        }.resume()
-    }
-    
-    private func handleAudioURLFailure(videoId: String, retryCount: Int, completion: @escaping (URL?) -> Void) {
-        if retryCount < apiInstances.count - 1 {
-            switchToNextInstance()
-            performAudioURLRequest(videoId: videoId, retryCount: retryCount + 1, completion: completion)
-        } else {
-            completion(nil)
         }
     }
 }
 
-// MARK: - Вспомогательные структуры ответов API Invidious
+// MARK: - Вспомогательные структуры ответов API Invidious (используются только для поиска)
 struct InvidiousSearchResult: Codable {
     let videoId: String
     let title: String
@@ -203,12 +180,3 @@ struct InvidiousSearchResult: Codable {
     let lengthSeconds: Int
 }
 
-struct InvidiousVideoInfo: Codable {
-    let adaptiveFormats: [InvidiousFormat]
-}
-
-struct InvidiousFormat: Codable {
-    let url: String
-    let mimeType: String
-    let bitrate: String?
-}

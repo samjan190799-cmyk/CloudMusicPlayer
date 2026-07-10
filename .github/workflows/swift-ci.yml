@@ -46,6 +46,12 @@ jobs:
         run: |
           xcodegen generate
 
+      - name: Resolve SPM Dependencies
+        run: |
+          xcodebuild -project CloudMusicPlayer.xcodeproj \
+            -scheme CloudMusicPlayer \
+            -resolvePackageDependencies
+
       - name: Build for iOS Device (unsigned)
         run: |
           set -o pipefail
