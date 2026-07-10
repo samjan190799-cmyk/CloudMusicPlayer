@@ -5,6 +5,7 @@ import Combine
 enum TrackSource: String, Codable {
     case google = "google"
     case yandex = "yandex"
+    case youtube = "youtube"
 }
 
 /// Модель локального (офлайн) трека
@@ -134,6 +135,22 @@ class DownloadManager: NSObject, ObservableObject {
             
             let request = URLRequest(url: downloadUrl)
             self?.startDownload(trackId: trackId, title: track.name, source: .yandex, request: request, size: track.size ?? 0)
+        }
+    }
+    
+    /// Запуск загрузки трека с YouTube
+    func downloadYouTubeTrack(_ track: YouTubeTrack) {
+        let trackId = track.id
+        guard activeDownloads[trackId] == nil else { return }
+        
+        YouTubeService.shared.getAudioURL(for: trackId) { [weak self] audioUrl in
+            guard let audioUrl = audioUrl else {
+                print("Не удалось получить ссылку для скачивания с YouTube")
+                return
+            }
+            
+            let request = URLRequest(url: audioUrl)
+            self?.startDownload(trackId: trackId, title: track.title, source: .youtube, request: request, size: 0)
         }
     }
     

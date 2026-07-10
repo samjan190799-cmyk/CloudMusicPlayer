@@ -115,6 +115,12 @@ class CacheManager: NSObject, ObservableObject {
                 let request = URLRequest(url: downloadUrl)
                 self?.startDownload(trackId: trackId, title: title, source: source, size: size, request: request)
             }
+        } else if source == .youtube {
+            YouTubeService.shared.getAudioURL(for: trackId) { [weak self] audioUrl in
+                guard let audioUrl = audioUrl else { return }
+                let request = URLRequest(url: audioUrl)
+                self?.startDownload(trackId: trackId, title: title, source: source, size: size, request: request)
+            }
         }
     }
     

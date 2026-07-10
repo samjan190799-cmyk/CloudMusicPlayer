@@ -44,11 +44,17 @@ struct ContentView: View {
                     }
                     .tag(2)
                 
+                YouTubeView()
+                    .tabItem {
+                        Label("YouTube", systemName: "play.rectangle.fill")
+                    }
+                    .tag(3)
+                
                 SettingsView()
                     .tabItem {
                         Label("Настройки", systemName: "gearshape.fill")
                     }
-                    .tag(3)
+                    .tag(4)
             }
             .accentColor(.cyan) // Активный цвет вкладок
             

@@ -267,6 +267,25 @@ class AudioPlayerManager: NSObject, ObservableObject {
             }
             return
         }
+        // 6. Стриминг с YouTube (получение ссылки на ходу через Invidious API)
+        else if track.sourceName.contains("YouTube") {
+            YouTubeService.shared.getAudioURL(for: track.id) { [weak self] audioUrl in
+                guard let audioUrl = audioUrl else {
+                    DispatchQueue.main.async {
+                        self?.playbackState = .stopped
+                    }
+                    return
+                }
+                DispatchQueue.main.async {
+                    let item = AVPlayerItem(url: audioUrl)
+                    self?.setupPlayer(with: item, track: track)
+                    
+                    // Запуск автоматического кэширования в фоне
+                    self?.triggerCaching(for: track)
+                }
+            }
+            return
+        }
         
         guard let item = playerItem else {
             playbackState = .stopped
@@ -289,6 +308,15 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     yandexPath: nil
                 )
             }
+        } else if track.sourceName.contains("YouTube") {
+            CacheManager.shared.cacheTrack(
+                trackId: track.id,
+                title: track.title,
+                source: .youtube,
+                size: 0,
+                googleFileId: nil,
+                yandexPath: nil
+            )
         } else {
             // Для Яндекса ищем трек в списке
             if let yandexTrack = YandexDiskService.shared.tracks.first(where: { $0.id == track.id }) {
@@ -312,6 +340,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 )
             }
         }
+    }
     
     private func setupPlayer(with item: AVPlayerItem, track: PlayerTrack) {
         player = AVPlayer(playerItem: item)
