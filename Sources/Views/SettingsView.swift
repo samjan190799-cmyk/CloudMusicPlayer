@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("geminiApiKey") private var geminiApiKey = ""
     @AppStorage("openaiApiKey") private var openaiApiKey = ""
     @AppStorage("anthropicApiKey") private var anthropicApiKey = ""
+    @AppStorage("playerInterfaceMode") private var playerInterfaceMode = "vinyl"
     
     // Статусы уведомлений
     @State private var showingAlert = false
@@ -328,6 +329,36 @@ struct SettingsView: View {
                                         .preferredColorScheme(.dark)
                                 }
                             }
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                        
+                        // 6. Настройки интерфейса плеера
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Image(systemName: "paintpalette.fill")
+                                    .foregroundColor(.cyan)
+                                    .font(.title3)
+                                Text("Настройки интерфейса плеера")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            
+                            Text("Выберите стиль отображения экрана воспроизведения.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                            
+                            Picker("Стиль плеера", selection: $playerInterfaceMode) {
+                                Text("Винил").tag("vinyl")
+                                Text("Обложка").tag("cover")
+                                Text("Визуализатор").tag("visualizer")
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
                         }
                         .padding(16)
                         .background(Color.white.opacity(0.04))

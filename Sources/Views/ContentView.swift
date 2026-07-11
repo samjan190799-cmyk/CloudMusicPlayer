@@ -32,29 +32,35 @@ struct ContentView: View {
                     }
                     .tag(0)
                 
+                DownloadsView()
+                    .tabItem {
+                        Label("Загрузки", systemImage: "arrow.down.circle.fill")
+                    }
+                    .tag(1)
+                
                 CloudView(source: .google, selectedTab: $selectedTab)
                     .tabItem {
                         Label("Google Диск", systemImage: "cloud.fill")
                     }
-                    .tag(1)
+                    .tag(2)
                 
                 CloudView(source: .yandex, selectedTab: $selectedTab)
                     .tabItem {
                         Label("Яндекс Диск", systemImage: "icloud.fill")
                     }
-                    .tag(2)
+                    .tag(3)
                 
                 YouTubeView()
                     .tabItem {
                         Label("YouTube", systemImage: "play.rectangle.fill")
                     }
-                    .tag(3)
+                    .tag(4)
                 
                 SettingsView()
                     .tabItem {
                         Label("Настройки", systemImage: "gearshape.fill")
                     }
-                    .tag(4)
+                    .tag(5)
             }
             .accentColor(.cyan) // Активный цвет вкладок
             

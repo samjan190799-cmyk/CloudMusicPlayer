@@ -50,6 +50,14 @@ enum DownloadStatus {
     case failed(error: String)
 }
 
+/// Модель активной фоновой загрузки
+struct ActiveDownload: Identifiable {
+    let id: String // trackId
+    let title: String
+    let source: TrackSource
+    let progress: Double
+}
+
 /// Менеджер загрузок и управления локальной медиатекой
 class DownloadManager: NSObject, ObservableObject {
     static let shared = DownloadManager()
@@ -70,6 +78,37 @@ class DownloadManager: NSObject, ObservableObject {
         createOfflineDirectory()
         createCoversDirectory()
         loadLibrary()
+    }
+    
+    /// Список активных загрузок в удобном для UI формате
+    var activeDownloadsList: [ActiveDownload] {
+        var list: [ActiveDownload] = []
+        for (trackId, progress) in activeDownloads {
+            if let task = downloadTasks[trackId],
+               let taskDescription = task.taskDescription {
+                let components = taskDescription.split(separator: "|", omittingEmptySubsequences: false)
+                if components.count >= 3 {
+                    let title = String(components[1])
+                    let sourceRaw = String(components[2])
+                    let source = TrackSource(rawValue: sourceRaw) ?? .youtube
+                    list.append(ActiveDownload(id: trackId, title: title, source: source, progress: progress))
+                }
+            } else {
+                list.append(ActiveDownload(id: trackId, title: "Загрузка...", source: .youtube, progress: progress))
+            }
+        }
+        return list.sorted { $0.title < $1.title }
+    }
+    
+    /// Отмена активной загрузки по ID трека
+    func cancelDownload(trackId: String) {
+        if let task = downloadTasks[trackId] {
+            task.cancel()
+        }
+        DispatchQueue.main.async {
+            self.activeDownloads.removeValue(forKey: trackId)
+            self.downloadTasks.removeValue(forKey: trackId)
+        }
     }
     
     /// Создание папки для офлайн музыки
@@ -357,10 +396,10 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
             
             // Вспомогательная функция для продолжения сохранения
-            func proceedSaving(finalTitle: String, finalArtist: String?, finalDuration: Double?, finalCoverURL: URL?) {
-                if let coverURL = finalCoverURL {
+            func proceedSaving(finalTitle: String, finalArtist: String?, finalDuration: Double?, finalCoverPath: String?) {
+                if let coverPath = finalCoverPath {
                     // Используем извлеченный кадр
-                    saveTrack(finalTitle, finalArtist, finalDuration, coverURL.path)
+                    saveTrack(finalTitle, finalArtist, finalDuration, coverPath)
                 } else if source == .youtube {
                     if let thumbUrl = thumbnailUrl {
                         self.downloadCover(from: thumbUrl, filename: trackId) { coverPath in
@@ -406,16 +445,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
                     print("ИИ: получение видеопотока для захвата кадра...")
                     YouTubeService.shared.getVideoURL(for: trackId) { videoURL in
                         if let videoURL = videoURL {
-                            self.extractFrame(from: videoURL, filename: trackId) { coverURL in
-                                proceedSaving(finalTitle: finalTitle, finalArtist: finalArtist, finalDuration: duration, finalCoverURL: coverURL)
+                            self.extractFrame(from: videoURL, filename: trackId) { coverPath in
+                                proceedSaving(finalTitle: finalTitle, finalArtist: finalArtist, finalDuration: duration, finalCoverPath: coverPath)
                             }
                         } else {
-                            proceedSaving(finalTitle: finalTitle, finalArtist: finalArtist, finalDuration: duration, finalCoverURL: nil)
+                            proceedSaving(finalTitle: finalTitle, finalArtist: finalArtist, finalDuration: duration, finalCoverPath: nil)
                         }
                     }
                 }
             } else {
-                proceedSaving(finalTitle: title, finalArtist: artist, finalDuration: duration, finalCoverURL: nil)
+                proceedSaving(finalTitle: title, finalArtist: artist, finalDuration: duration, finalCoverPath: nil)
             }
             
         } catch {
@@ -442,8 +481,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
         }
     }
     
-    /// Извлечение кадра из видеопотока на 15-й секунде
-    func extractFrame(from videoURL: URL, filename: String, completion: @escaping (URL?) -> Void) {
+    /// Извлечение кадра из видеопотока на 15-й секунде, кадрирование и сжатие в 800x800
+    func extractFrame(from videoURL: URL, filename: String, completion: @escaping (String?) -> Void) {
         let asset = AVAsset(url: videoURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -451,22 +490,33 @@ extension DownloadManager: URLSessionDownloadDelegate {
         generator.requestedTimeToleranceAfter = .zero
         
         let time = CMTime(seconds: 15.0, preferredTimescale: 600)
-        generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { _, cgImage, _, _, error in
+        generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { [weak self] _, cgImage, _, _, error in
+            guard let self = self else {
+                completion(nil)
+                return
+            }
             if let cgImage = cgImage {
-                let image = UIImage(cgImage: cgImage)
-                if let data = image.jpegData(compressionQuality: 0.8) {
+                let rawImage = UIImage(cgImage: cgImage)
+                // Сжимаем кадр до 800x800 (квадрат высокого разрешения)
+                let resizedImage = rawImage.resized(to: CGSize(width: 800, height: 800)) ?? rawImage
+                
+                if let data = resizedImage.jpegData(compressionQuality: 0.85) {
                     let fileManager = FileManager.default
                     guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
                         completion(nil)
                         return
                     }
-                    let coversDir = documentsURL.appendingPathComponent("Covers", isDirectory: true)
+                    let relativePath = "\(self.coversFolder)/\(filename.uuidCompatible).jpg"
+                    let fileURL = documentsURL.appendingPathComponent(relativePath)
+                    
+                    // Убедимся, что директория существует
+                    let coversDir = documentsURL.appendingPathComponent(self.coversFolder, isDirectory: true)
                     try? fileManager.createDirectory(at: coversDir, withIntermediateDirectories: true)
-                    let fileURL = coversDir.appendingPathComponent("\(filename).jpg")
+                    
                     do {
                         try data.write(to: fileURL)
-                        print("Кадр успешно извлечен и сохранен: \(fileURL.path)")
-                        completion(fileURL)
+                        print("Кадр успешно извлечен, сжат в 800x800 и сохранен: \(relativePath)")
+                        completion(relativePath)
                     } catch {
                         print("Ошибка сохранения кадра на диск: \(error)")
                         completion(nil)
@@ -497,5 +547,15 @@ extension String {
             }
         }
         return clean.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// Расширение для быстрого изменения размера изображений обложек
+extension UIImage {
+    func resized(to size: CGSize) -> UIImage? {
+        UIGraphicsBeginImageContextWithOptions(size, false, 0.0)
+        defer { UIGraphicsEndImageContext() }
+        self.draw(in: CGRect(origin: .zero, size: size))
+        return UIGraphicsGetImageFromCurrentImageContext()
     }
 }
