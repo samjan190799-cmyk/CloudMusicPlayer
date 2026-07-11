@@ -290,17 +290,6 @@ class DownloadManager: NSObject, ObservableObject {
         task.resume()
     }
     
-    /// Отмена загрузки
-    func cancelDownload(trackId: String) {
-        if let task = downloadTasks[trackId] {
-            task.cancel()
-            downloadTasks.removeValue(forKey: trackId)
-        }
-        DispatchQueue.main.async {
-            self.activeDownloads.removeValue(forKey: trackId)
-        }
-    }
-    
     /// Удаление локального файла трека и его записи из медиатеки
     func deleteTrack(trackId: String) {
         guard let index = localTracks.firstIndex(where: { $0.id == trackId }) else { return }
