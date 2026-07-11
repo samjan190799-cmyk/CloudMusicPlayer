@@ -1,12 +1,14 @@
 import SwiftUI
+import MediaPlayer
 
 /// Детальное полноэкранное представление плеера
 struct PlayerDetailView: View {
     @ObservedObject var playerManager = AudioPlayerManager.shared
+    @ObservedObject var playlistManager = PlaylistManager.shared
     @Binding var isPlayerExpanded: Bool
     
     @State private var isDraggingSlider = false
-    @State private var dragTime: Double = 0.0
+    @State private var progress: Double = 0.0
     
     // Анимация вращения обложки
     @State private var rotationAngle: Double = 0.0
@@ -59,86 +61,178 @@ struct PlayerDetailView: View {
                     
                     Spacer()
                     
-                    // Обложка трека с неоновым свечением и вращением
+                    // Виниловый проигрыватель с неоновым свечением
                     ZStack {
-                        // Неоновое свечение сзади обложки
-                        Circle()
-                            .fill(Color.purple.opacity(0.2))
-                            .frame(width: 260, height: 260)
-                            .blur(radius: 30)
+                        // Неоновое свечение сзади проигрывателя
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(Color.purple.opacity(0.15))
+                            .frame(width: 290, height: 290)
+                            .blur(radius: 20)
                         
-                        // Вращающийся виниловый диск / обложка
+                        // 1. Корпус проигрывателя (подложка/плита)
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(LinearGradient(
+                                colors: [Color(red: 0.12, green: 0.12, blue: 0.16), Color(red: 0.05, green: 0.05, blue: 0.08)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .frame(width: 290, height: 290)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 24)
+                                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                            )
+                            .shadow(color: Color.black.opacity(0.6), radius: 15, x: 0, y: 8)
+                        
+                        // Металлические уголки (акцент премиального дизайна)
+                        Group {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 6, height: 6)
+                                .offset(x: -130, y: -130)
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 6, height: 6)
+                                .offset(x: 130, y: -130)
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 6, height: 6)
+                                .offset(x: -130, y: 130)
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 6, height: 6)
+                                .offset(x: 130, y: 130)
+                        }
+                        
+                        // 2. Металлический круг под винилом (диск проигрывателя - platter)
                         Circle()
                             .fill(LinearGradient(
-                                colors: [Color(red: 0.1, green: 0.1, blue: 0.15), Color(red: 0.04, green: 0.04, blue: 0.06)],
+                                colors: [Color(white: 0.3), Color(white: 0.1)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
                             .frame(width: 250, height: 250)
-                            .shadow(color: .purple.opacity(0.3), radius: 15, x: 0, y: 0)
+                            .shadow(radius: 2)
                         
-                        // Рисунки дорожек винила
-                        Circle()
-                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
-                            .frame(width: 210, height: 210)
-                        Circle()
-                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
-                            .frame(width: 170, height: 170)
-                        
-                        // Центральный ярлык
+                        // 3. Сам виниловый диск (вращающийся)
                         ZStack {
+                            // Тело винила (черный пластик)
+                            Circle()
+                                .fill(Color(white: 0.06))
+                                .frame(width: 240, height: 240)
+                                .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
+                            
+                            // Световые отблески (эффект винилового блеска)
+                            AngularGradient(
+                                gradient: Gradient(colors: [
+                                    .clear, .white.opacity(0.04), .clear, .white.opacity(0.04), .clear
+                                ]),
+                                center: .center
+                            )
+                            .frame(width: 240, height: 240)
+                            .clipShape(Circle())
+                            
+                            // Дорожки винила (тонкие концентрические круги)
+                            ForEach(0..<10) { i in
+                                Circle()
+                                    .stroke(Color.white.opacity(0.03), lineWidth: 0.5)
+                                    .frame(width: CGFloat(90 + i * 14), height: CGFloat(90 + i * 14))
+                            }
+                            
+                            // Центральный бумажный ярлык (Album Art / Label)
+                            ZStack {
+                                if let coverURL = track.localCoverURL,
+                                   let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(LinearGradient(
+                                            colors: [.purple, .cyan],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ))
+                                        .frame(width: 80, height: 80)
+                                    
+                                    // Первая буква названия трека по центру
+                                    Text(String(track.title.first ?? "🎵").uppercased())
+                                        .font(.system(size: 32, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .shadow(radius: 2)
+                                }
+                            }
+                            
+                            // Центральный шпиндель (металлический штырек)
                             Circle()
                                 .fill(LinearGradient(
-                                    colors: [.purple, .cyan],
+                                    colors: [.white, .gray],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ))
-                                .frame(width: 90, height: 90)
-                            
-                            Image(systemName: "music.note")
-                                .font(.system(size: 32))
-                                .foregroundColor(.white)
+                                .frame(width: 8, height: 8)
+                                .shadow(radius: 1)
                         }
+                        .rotationEffect(.degrees(rotationAngle))
+                        
+                        // 4. Тонарм (расположен в верхнем правом углу)
+                        TonearmView(isPlaying: playerManager.playbackState == .playing)
+                            .offset(x: 95, y: -75) // Размещаем базу тонарма сверху справа
                     }
-                    .rotationEffect(.degrees(rotationAngle))
-                    .frame(height: 270)
+                    .frame(width: 290, height: 290)
                     
                     Spacer()
                     
-                    // Информация об исполнителе и треке
-                    VStack(spacing: 6) {
-                        Text(track.title)
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .padding(.horizontal, 24)
+                    // Информация об исполнителе и треке с кнопкой "Избранное"
+                    HStack(spacing: 0) {
+                        // Заглушка слева для идеального центрирования текста
+                        Color.clear
+                            .frame(width: 32, height: 32)
                         
-                        Text(track.artist)
-                            .font(.system(size: 16))
-                            .foregroundColor(.purple.opacity(0.8))
+                        Spacer()
                         
-                        Text("Источник: \(track.sourceName)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray)
-                            .padding(.top, 4)
+                        VStack(spacing: 6) {
+                            Text(track.title)
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                            
+                            Text(track.artist)
+                                .font(.system(size: 16))
+                                .foregroundColor(.purple.opacity(0.8))
+                            
+                            Text("Источник: \(track.sourceName)")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                                .padding(.top, 4)
+                        }
+                        
+                        Spacer()
+                        
+                        // Кнопка Избранного (сердечко)
+                        Button(action: {
+                            let playlistTrack = track.toPlaylistTrack()
+                            playlistManager.toggleFavorite(track: playlistTrack)
+                        }) {
+                            Image(systemName: playlistManager.isTrackFavorite(trackId: track.id) ? "heart.fill" : "heart")
+                                .font(.system(size: 26))
+                                .foregroundColor(playlistManager.isTrackFavorite(trackId: track.id) ? .pink : .white.opacity(0.8))
+                        }
+                        .frame(width: 32, height: 32)
                     }
+                    .padding(.horizontal, 24)
                     
                     // Прогресс-бар воспроизведения
                     VStack(spacing: 8) {
                         Slider(
-                            value: Binding(
-                                get: { isDraggingSlider ? dragTime : playerManager.currentTime },
-                                set: { newValue in
-                                    isDraggingSlider = true
-                                    dragTime = newValue
-                                }
-                            ),
+                            value: $progress,
                             in: 0...max(playerManager.duration, 1.0),
                             onEditingChanged: { editing in
+                                isDraggingSlider = editing
                                 if !editing {
-                                    playerManager.seek(to: dragTime)
-                                    isDraggingSlider = false
+                                    playerManager.seek(to: progress)
                                 }
                             }
                         )
@@ -146,7 +240,7 @@ struct PlayerDetailView: View {
                         .padding(.horizontal, 24)
                         
                         HStack {
-                            Text(formatTime(isDraggingSlider ? dragTime : playerManager.currentTime))
+                            Text(formatTime(progress))
                                 .font(.system(size: 12))
                                 .foregroundColor(.gray)
                             Spacer()
@@ -223,8 +317,8 @@ struct PlayerDetailView: View {
                                 .foregroundColor(.white.opacity(0.6))
                         }
                         
-                        Slider(value: $playerManager.volume, in: 0...1)
-                            .accentColor(.purple)
+                        SystemVolumeSlider()
+                            .frame(height: 32)
                         
                         Image(systemName: "speaker.wave.3.fill")
                             .foregroundColor(.white.opacity(0.6))
@@ -247,6 +341,14 @@ struct PlayerDetailView: View {
                 if playerManager.playbackState == .playing {
                     rotationAngle += 1.5 // Вращаем на 1.5 градуса каждые 0.1 секунды
                 }
+            }
+            .onReceive(playerManager.$currentTime) { newTime in
+                if !isDraggingSlider {
+                    progress = newTime
+                }
+            }
+            .onAppear {
+                progress = playerManager.currentTime
             }
         )
     }
@@ -292,5 +394,115 @@ struct VisualizerBar: View {
                     heightMultiplier = 0.2
                 }
             }
+    }
+}
+
+/// Реалистичный тонарм винилового проигрывателя
+struct TonearmView: View {
+    let isPlaying: Bool
+    
+    var body: some View {
+        ZStack {
+            // База тонарма (поворотное основание, неподвижное)
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [Color(white: 0.2), Color(white: 0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 44, height: 44)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 2)
+                
+                Circle()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1.5)
+                    .frame(width: 44, height: 44)
+                
+                // Металлический центр базы
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [Color(white: 0.8), Color(white: 0.5)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 22, height: 22)
+                
+                // Крепежный винт в центре
+                Circle()
+                    .fill(Color(white: 0.15))
+                    .frame(width: 6, height: 6)
+            }
+            
+            // Рычаг тонарма (вращающийся вокруг центра базы)
+            ZStack(alignment: .top) {
+                // Изогнутый тонарм (металлическая трубка)
+                Path { path in
+                    path.move(to: CGPoint(x: 15, y: 15))
+                    path.addLine(to: CGPoint(x: 15, y: 80))
+                    path.addQuadCurve(to: CGPoint(x: -12, y: 145), control: CGPoint(x: 15, y: 120))
+                }
+                .stroke(
+                    LinearGradient(
+                        colors: [Color(white: 0.65), Color(white: 0.95), Color(white: 0.65)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                )
+                .frame(width: 30, height: 160)
+                
+                // Картридж и игла на конце рычага
+                ZStack {
+                    // Корпус картриджа (ярко-оранжевый акцент)
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.orange)
+                        .frame(width: 10, height: 20)
+                        .shadow(radius: 1)
+                    
+                    // Серебристый шелл (headshell)
+                    Rectangle()
+                        .fill(LinearGradient(
+                            colors: [Color(white: 0.8), Color(white: 0.5)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                        .frame(width: 12, height: 5)
+                        .offset(y: -8)
+                    
+                    // Маленький белый держатель звукоснимателя
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(width: 5, height: 1.2)
+                        .offset(x: 7, y: 1)
+                }
+                .rotationEffect(.degrees(-32))
+                .offset(x: -28, y: 130)
+            }
+            .frame(width: 30, height: 160)
+            .offset(y: 80) // Смещаем контейнер вниз, чтобы центр базы тонарма совпал с точкой (15, 15) внутри Path
+            .rotationEffect(.degrees(isPlaying ? 25 : -5), anchor: .top)
+            .animation(.spring(response: 1.0, dampingFraction: 0.75, blendDuration: 0), value: isPlaying)
+        }
+    }
+}
+
+/// Слайдер системной громкости iOS
+struct SystemVolumeSlider: UIViewRepresentable {
+    func makeUIView(context: Context) -> MPVolumeView {
+        let volumeView = MPVolumeView(frame: .zero)
+        volumeView.showsRouteButton = false
+        
+        // Кастомизируем внешний вид слайдера внутри MPVolumeView
+        if let slider = volumeView.subviews.first(where: { $0 is UISlider }) as? UISlider {
+            slider.minimumTrackTintColor = .systemPurple
+            slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.12)
+            slider.thumbTintColor = .white
+        }
+        
+        return volumeView
+    }
+    
+    func updateUIView(_ uiView: MPVolumeView, context: Context) {
+        // Системный слайдер автоматически синхронизируется операционной системой
     }
 }

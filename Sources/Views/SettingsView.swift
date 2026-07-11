@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var googleAccessToken = ""
     @State private var yandexToken = ""
     
+    @AppStorage("autoDownloadFavorites") private var autoDownloadFavorites = true
+    
     // Статусы уведомлений
     @State private var showingAlert = false
     @State private var alertMessage = ""
@@ -236,6 +238,32 @@ struct SettingsView: View {
                                 .background(Color.red.opacity(0.1))
                                 .cornerRadius(10)
                             }
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                        
+                        // 4. Настройки загрузок
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Настройки загрузок")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            
+                            Toggle(isOn: $autoDownloadFavorites) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Скачивать избранное автоматически")
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 15))
+                                    Text("Автоматически скачивать треки в медиатеку при добавлении в избранное.")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                            .tint(.purple)
                         }
                         .padding(16)
                         .background(Color.white.opacity(0.04))

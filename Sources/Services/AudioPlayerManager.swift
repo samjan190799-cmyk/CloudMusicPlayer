@@ -27,6 +27,7 @@ struct PlayerTrack: Identifiable, Equatable {
     let localURL: URL?
     let remoteURL: URL?
     let googleFileId: String? // Для получения авторизованного запроса
+    var localCoverURL: URL? = nil // Локальный путь к обложке
     
     static func == (lhs: PlayerTrack, rhs: PlayerTrack) -> Bool {
         return lhs.id == rhs.id
@@ -169,10 +170,12 @@ class AudioPlayerManager: NSObject, ObservableObject {
         guard let player = player else { return }
         let cmTime = CMTime(seconds: time, preferredTimescale: 1000)
         playbackState = .loading
+        currentTime = time
         player.seek(to: cmTime) { [weak self] finished in
             if finished {
                 DispatchQueue.main.async {
                     self?.playbackState = self?.player?.rate == 0 ? .paused : .playing
+                    self?.currentTime = time
                     self?.updateNowPlayingTime()
                 }
             }
@@ -383,9 +386,11 @@ class AudioPlayerManager: NSObject, ObservableObject {
         // Обсервация текущего времени проигрывания
         let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self = self else { return }
+            guard self.playbackState != .loading else { return }
             let seconds = CMTimeGetSeconds(time)
             if !seconds.isNaN {
-                self?.currentTime = seconds
+                self.currentTime = seconds
             }
         }
         
@@ -530,5 +535,53 @@ class AudioPlayerManager: NSObject, ObservableObject {
             self?.seek(to: positionEvent.positionTime)
             return .success
         }
+    }
+}
+
+// MARK: - Конвертация в формат трека плейлиста
+extension PlayerTrack {
+    func toPlaylistTrack() -> PlaylistTrack {
+        var relativePath: String? = nil
+        if let localURL = localURL {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let docsPath = docs.standardizedFileURL.path
+            let filePath = localURL.standardizedFileURL.path
+            if filePath.hasPrefix(docsPath) {
+                var rel = filePath.replacingOccurrences(of: docsPath, with: "")
+                if rel.hasPrefix("/") {
+                    rel.removeFirst()
+                }
+                relativePath = rel
+            } else {
+                relativePath = localURL.lastPathComponent
+            }
+        }
+        
+        var coverRelPath: String? = nil
+        if let localCoverURL = localCoverURL {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let docsPath = docs.standardizedFileURL.path
+            let filePath = localCoverURL.standardizedFileURL.path
+            if filePath.hasPrefix(docsPath) {
+                var rel = filePath.replacingOccurrences(of: docsPath, with: "")
+                if rel.hasPrefix("/") {
+                    rel.removeFirst()
+                }
+                coverRelPath = rel
+            } else {
+                coverRelPath = localCoverURL.lastPathComponent
+            }
+        }
+        
+        return PlaylistTrack(
+            id: id,
+            title: title,
+            artist: artist,
+            sourceName: sourceName,
+            localRelativePath: relativePath,
+            remoteURLString: remoteURL?.absoluteString,
+            googleFileId: googleFileId,
+            localCoverPath: coverRelPath
+        )
     }
 }

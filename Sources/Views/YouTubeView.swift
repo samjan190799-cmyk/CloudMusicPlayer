@@ -5,6 +5,7 @@ struct YouTubeView: View {
     @ObservedObject var service = YouTubeService.shared
     @ObservedObject var downloadManager = DownloadManager.shared
     @ObservedObject var playerManager = AudioPlayerManager.shared
+    @ObservedObject var playlistManager = PlaylistManager.shared
     
     @State private var searchQuery = ""
     @State private var selectedTrackForPlaylist: PlaylistTrack? = nil
@@ -198,6 +199,17 @@ struct YouTubeView: View {
             
             // Кнопка контекстного меню плейлиста
             Menu {
+                Button(action: {
+                    let playlistTrack = track.toPlaylistTrack()
+                    playlistManager.toggleFavorite(track: playlistTrack)
+                }) {
+                    if playlistManager.isTrackFavorite(trackId: track.id) {
+                        Label("Удалить из избранного", systemImage: "heart.slash.fill")
+                    } else {
+                        Label("Добавить в избранное", systemImage: "heart.fill")
+                    }
+                }
+                
                 Button(action: {
                     selectedTrackForPlaylist = track.toPlaylistTrack()
                 }) {

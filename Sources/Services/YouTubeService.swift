@@ -136,6 +136,60 @@ class YouTubeService: ObservableObject {
         }
     }
     
+    /// Standalone search method to find a matching track metadata
+    func findMetadata(for query: String, completion: @escaping (YouTubeTrack?) -> Void) {
+        performMetadataSearch(query: query, retryCount: 0, completion: completion)
+    }
+    
+    private func performMetadataSearch(query: String, retryCount: Int, completion: @escaping (YouTubeTrack?) -> Void) {
+        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let urlString = "\(apiInstances[retryCount % apiInstances.count])/api/v1/search?q=\(encodedQuery)&type=video&page=1"
+        
+        guard let url = URL(string: urlString) else {
+            completion(nil)
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            if let error = error {
+                print("findMetadata error: \(error.localizedDescription)")
+                self?.retryMetadataSearch(query: query, retryCount: retryCount + 1, completion: completion)
+                return
+            }
+            
+            guard let data = data else {
+                self?.retryMetadataSearch(query: query, retryCount: retryCount + 1, completion: completion)
+                return
+            }
+            
+            do {
+                let items = try JSONDecoder().decode([InvidiousSearchResult].self, from: data)
+                if let first = items.first {
+                    let track = YouTubeTrack(
+                        id: first.videoId,
+                        title: first.title,
+                        uploader: first.author,
+                        duration: first.lengthSeconds,
+                        thumbnailUrl: "https://img.youtube.com/vi/\(first.videoId)/hqdefault.jpg"
+                    )
+                    completion(track)
+                } else {
+                    completion(nil)
+                }
+            } catch {
+                self?.retryMetadataSearch(query: query, retryCount: retryCount + 1, completion: completion)
+            }
+        }.resume()
+    }
+    
+    private func retryMetadataSearch(query: String, retryCount: Int, completion: @escaping (YouTubeTrack?) -> Void) {
+        if retryCount < apiInstances.count {
+            performMetadataSearch(query: query, retryCount: retryCount, completion: completion)
+        } else {
+            completion(nil)
+        }
+    }
+    
     // MARK: - Извлечение прямой ссылки на аудиопоток через YouTubeKit
     
     /// Извлечение прямой ссылки на аудиопоток по ID видео.

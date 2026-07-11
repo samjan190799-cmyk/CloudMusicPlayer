@@ -29,14 +29,14 @@ struct PlaylistDetailView: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(LinearGradient(
-                                colors: [.purple, .cyan],
+                                colors: playlist.id == PlaylistManager.favoritesUUID ? [.pink, .purple] : [.purple, .cyan],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
                             .frame(width: 120, height: 120)
-                            .shadow(color: .purple.opacity(0.4), radius: 10, x: 0, y: 5)
+                            .shadow(color: playlist.id == PlaylistManager.favoritesUUID ? .pink.opacity(0.4) : .purple.opacity(0.4), radius: 10, x: 0, y: 5)
                         
-                        Image(systemName: "music.note.list")
+                        Image(systemName: playlist.id == PlaylistManager.favoritesUUID ? "heart.fill" : "music.note.list")
                             .font(.system(size: 48))
                             .foregroundColor(.white)
                     }
@@ -102,14 +102,23 @@ struct PlaylistDetailView: View {
                                 playTrack(playlistTrack)
                             }) {
                                 HStack(spacing: 12) {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.white.opacity(0.06))
-                                            .frame(width: 40, height: 40)
-                                        
-                                        Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
-                                            .foregroundColor(isPlayingThis ? .cyan : .white)
-                                    }
+                                     ZStack {
+                                         if let coverURL = playlistTrack.localCoverURL,
+                                            let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                                             Image(uiImage: uiImage)
+                                                 .resizable()
+                                                 .scaledToFill()
+                                                 .frame(width: 40, height: 40)
+                                                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                                         } else {
+                                             RoundedRectangle(cornerRadius: 8)
+                                                 .fill(Color.white.opacity(0.06))
+                                                 .frame(width: 40, height: 40)
+                                             
+                                             Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
+                                                 .foregroundColor(isPlayingThis ? .cyan : .white)
+                                         }
+                                     }
                                     
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(playlistTrack.title)
@@ -170,7 +179,8 @@ extension PlaylistTrack {
             sourceName: sourceName,
             localURL: localURL,
             remoteURL: remoteURL,
-            googleFileId: googleFileId
+            googleFileId: googleFileId,
+            localCoverURL: localCoverURL
         )
     }
 }

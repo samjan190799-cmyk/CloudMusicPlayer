@@ -14,17 +14,26 @@ struct MiniPlayerView: View {
             HStack(spacing: 12) {
                 // Иконка/обложка
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(
-                            colors: [.purple, .blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 48, height: 48)
-                    
-                    Image(systemName: "music.note")
-                        .foregroundColor(.white)
-                        .font(.title3)
+                    if let coverURL = track.localCoverURL,
+                       let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(LinearGradient(
+                                colors: [.purple, .blue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .frame(width: 48, height: 48)
+                        
+                        Image(systemName: "music.note")
+                            .foregroundColor(.white)
+                            .font(.title3)
+                    }
                 }
                 
                 // Название трека и источник
@@ -66,15 +75,14 @@ struct MiniPlayerView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.06))
-                    .background(Color.black.opacity(0.4))
+                    .fill(.ultraThinMaterial)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
                     )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+            .shadow(color: Color.purple.opacity(0.15), radius: 12, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 6)
             .padding(.horizontal, 12)
             .padding(.bottom, 60) // Отступ от нижнего бара
             .onTapGesture {

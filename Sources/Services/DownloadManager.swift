@@ -6,6 +6,14 @@ enum TrackSource: String, Codable {
     case google = "google"
     case yandex = "yandex"
     case youtube = "youtube"
+    
+    var displayName: String {
+        switch self {
+        case .google: return "Google Drive"
+        case .yandex: return "Яндекс Диск"
+        case .youtube: return "YouTube"
+        }
+    }
 }
 
 /// Модель локального (офлайн) трека
@@ -16,10 +24,19 @@ struct LocalTrack: Identifiable, Codable {
     let relativePath: String // Путь относительно директории Documents
     let size: Int64
     let addedAt: Date
+    var artist: String? = nil
+    var duration: Double? = nil
+    var localCoverPath: String? = nil
     
     var localURL: URL {
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documentsDirectory.appendingPathComponent(relativePath)
+    }
+    
+    var localCoverURL: URL? {
+        guard let coverPath = localCoverPath else { return nil }
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsDirectory.appendingPathComponent(coverPath)
     }
 }
 
@@ -40,6 +57,7 @@ class DownloadManager: NSObject, ObservableObject {
     
     private let libraryFileName = "Library.json"
     private let offlineFolder = "OfflineMusic"
+    private let coversFolder = "OfflineCovers"
     
     private var downloadTasks: [String: URLSessionDownloadTask] = [:]
     private var urlSession: URLSession!
@@ -48,6 +66,7 @@ class DownloadManager: NSObject, ObservableObject {
         super.init()
         self.urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         createOfflineDirectory()
+        createCoversDirectory()
         loadLibrary()
     }
     
@@ -58,6 +77,44 @@ class DownloadManager: NSObject, ObservableObject {
         if !FileManager.default.fileExists(atPath: folderURL.path) {
             try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         }
+    }
+    
+    /// Создание папки для обложек офлайн
+    private func createCoversDirectory() {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let folderURL = documentsURL.appendingPathComponent(coversFolder)
+        if !FileManager.default.fileExists(atPath: folderURL.path) {
+            try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        }
+    }
+    
+    /// Фоновое скачивание изображения обложки
+    func downloadCover(from urlString: String, filename: String, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: urlString) else {
+            completion(nil)
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let self = self, let data = data, error == nil else {
+                completion(nil)
+                return
+            }
+            
+            let safeFilename = "\(filename.uuidCompatible).jpg"
+            let relativePath = "\(self.coversFolder)/\(safeFilename)"
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let fileURL = documentsURL.appendingPathComponent(relativePath)
+            
+            do {
+                try data.write(to: fileURL)
+                completion(relativePath)
+            } catch {
+                print("Ошибка при записи обложки: \(error)")
+                completion(nil)
+            }
+        }
+        task.resume()
     }
     
     /// Путь к файлу базы данных Library.json
@@ -152,19 +209,42 @@ class DownloadManager: NSObject, ObservableObject {
             var request = URLRequest(url: audioUrl)
             request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
             request.setValue("https://www.youtube.com/", forHTTPHeaderField: "Referer")
-            self?.startDownload(trackId: trackId, title: track.title, source: .youtube, request: request, size: 0)
+            self?.startDownload(
+                trackId: trackId,
+                title: track.title,
+                source: .youtube,
+                request: request,
+                size: 0,
+                artist: track.uploader,
+                duration: Double(track.duration),
+                thumbnailUrl: track.thumbnailUrl
+            )
         }
     }
     
     /// Внутренний метод запуска задачи скачивания
-    private func startDownload(trackId: String, title: String, source: TrackSource, request: URLRequest, size: Int64) {
+    private func startDownload(
+        trackId: String,
+        title: String,
+        source: TrackSource,
+        request: URLRequest,
+        size: Int64,
+        artist: String? = nil,
+        duration: Double? = nil,
+        thumbnailUrl: String? = nil
+    ) {
         DispatchQueue.main.async {
             self.activeDownloads[trackId] = 0.0
         }
         
         let task = urlSession.downloadTask(with: request)
-        // Будем сохранять метаданные о задаче во вспомогательном словаре
-        task.taskDescription = "\(trackId)|\(title)|\(source.rawValue)|\(size)"
+        
+        let artistStr = artist ?? ""
+        let durationStr = duration != nil ? String(duration!) : "0"
+        let thumbnailStr = thumbnailUrl ?? ""
+        
+        // Добавляем метаданные в описание задачи
+        task.taskDescription = "\(trackId)|\(title)|\(source.rawValue)|\(size)|\(artistStr)|\(durationStr)|\(thumbnailStr)"
         downloadTasks[trackId] = task
         task.resume()
     }
@@ -214,7 +294,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let taskDescription = downloadTask.taskDescription else { return }
-        let components = taskDescription.split(separator: "|")
+        let components = taskDescription.components(separatedBy: "|")
         guard components.count >= 4 else { return }
         
         let trackId = String(components[0])
@@ -222,6 +302,11 @@ extension DownloadManager: URLSessionDownloadDelegate {
         let sourceRaw = String(components[2])
         let size = Int64(components[3]) ?? 0
         let source = TrackSource(rawValue: sourceRaw) ?? .google
+        
+        // Считываем опциональные параметры
+        let artist: String? = components.count >= 5 && !components[4].isEmpty ? String(components[4]) : nil
+        let duration: Double? = components.count >= 6 && !components[5].isEmpty ? Double(components[5]) : nil
+        let thumbnailUrl: String? = components.count >= 7 && !components[6].isEmpty ? String(components[6]) : nil
         
         // Генерируем уникальное локальное имя файла для избежания конфликтов
         let fileExtension = "mp3" // По умолчанию mp3
@@ -240,22 +325,58 @@ extension DownloadManager: URLSessionDownloadDelegate {
         do {
             try fileManager.moveItem(at: location, to: destinationURL)
             
-            let newTrack = LocalTrack(
-                id: trackId,
-                title: title,
-                source: source,
-                relativePath: relativeFilePath,
-                size: size,
-                addedAt: Date()
-            )
-            
-            DispatchQueue.main.async {
-                // Добавляем в локальный список
-                self.localTracks.append(newTrack)
-                self.saveLibrary()
-                self.activeDownloads.removeValue(forKey: trackId)
-                self.downloadTasks.removeValue(forKey: trackId)
+            // Вычисляем реальный размер файла на диске после успешного скачивания
+            var fileSize: Int64 = size
+            if let attributes = try? fileManager.attributesOfItem(atPath: destinationURL.path),
+               let sizeValue = attributes[.size] as? Int64 {
+                fileSize = sizeValue
             }
+            
+            // Замыкание для записи в библиотеку
+            let saveTrack = { (finalArtist: String?, finalDuration: Double?, finalCoverPath: String?) in
+                let newTrack = LocalTrack(
+                    id: trackId,
+                    title: title,
+                    source: source,
+                    relativePath: relativeFilePath,
+                    size: fileSize,
+                    addedAt: Date(),
+                    artist: finalArtist,
+                    duration: finalDuration,
+                    localCoverPath: finalCoverPath
+                )
+                
+                DispatchQueue.main.async {
+                    self.localTracks.append(newTrack)
+                    self.saveLibrary()
+                    self.activeDownloads.removeValue(forKey: trackId)
+                    self.downloadTasks.removeValue(forKey: trackId)
+                }
+            }
+            
+            // Загрузка обложки и поиск метаданных
+            if source == .youtube {
+                if let thumbUrl = thumbnailUrl {
+                    self.downloadCover(from: thumbUrl, filename: trackId) { coverPath in
+                        saveTrack(artist, duration, coverPath)
+                    }
+                } else {
+                    saveTrack(artist, duration, nil)
+                }
+            } else {
+                // Скачано из облака (Google/Yandex) - ищем на YouTube
+                let searchQuery = title.sanitizedForSearch
+                YouTubeService.shared.findMetadata(for: searchQuery) { ytTrack in
+                    if let ytTrack = ytTrack {
+                        self.downloadCover(from: ytTrack.thumbnailUrl, filename: trackId) { coverPath in
+                            saveTrack(ytTrack.uploader, Double(ytTrack.duration), coverPath)
+                        }
+                    } else {
+                        saveTrack(nil, nil, nil)
+                    }
+                }
+            }
+            
         } catch {
             print("Ошибка при сохранении скачанного файла: \(error)")
             DispatchQueue.main.async {
@@ -285,5 +406,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
 extension String {
     var uuidCompatible: String {
         return self.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+    }
+    
+    var sanitizedForSearch: String {
+        var clean = self
+        let extensions = [".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".wma"]
+        for ext in extensions {
+            if clean.lowercased().hasSuffix(ext) {
+                clean = String(clean.dropLast(ext.count))
+            }
+        }
+        return clean.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

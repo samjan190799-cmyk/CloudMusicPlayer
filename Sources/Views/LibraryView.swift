@@ -13,6 +13,13 @@ struct LibraryView: View {
     @State private var showingCreatePlaylistAlert = false
     @State private var newPlaylistName = ""
     
+    @AppStorage("isPlaylistGridView") private var isGridView = false
+    
+    private let columns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
+    
     var filteredTracks: [LocalTrack] {
         if searchText.isEmpty {
             return downloadManager.localTracks
@@ -68,12 +75,24 @@ struct LibraryView: View {
                             }
                         }
                     } else {
-                        Button(action: {
-                            showingCreatePlaylistAlert = true
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.cyan)
+                        HStack(spacing: 16) {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isGridView.toggle()
+                                }
+                            }) {
+                                Image(systemName: isGridView ? "list.bullet" : "square.grid.2x2.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.cyan)
+                            }
+                            
+                            Button(action: {
+                                showingCreatePlaylistAlert = true
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.cyan)
+                            }
                         }
                     }
                 }
@@ -137,15 +156,24 @@ struct LibraryView: View {
                                 playLocalTrack(localTrack)
                             }) {
                                 HStack(spacing: 12) {
-                                    // Иконка
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.white.opacity(0.08))
-                                            .frame(width: 44, height: 44)
-                                        
-                                        Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
-                                            .foregroundColor(isPlayingThis ? .cyan : .white)
-                                    }
+                                     // Иконка / Обложка
+                                     ZStack {
+                                         if let coverURL = localTrack.localCoverURL,
+                                            let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                                             Image(uiImage: uiImage)
+                                                 .resizable()
+                                                 .scaledToFill()
+                                                 .frame(width: 44, height: 44)
+                                                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                                         } else {
+                                             RoundedRectangle(cornerRadius: 8)
+                                                 .fill(Color.white.opacity(0.08))
+                                                 .frame(width: 44, height: 44)
+                                             
+                                             Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
+                                                 .foregroundColor(isPlayingThis ? .cyan : .white)
+                                         }
+                                     }
                                     
                                     // Название трека и размер
                                     VStack(alignment: .leading, spacing: 4) {
@@ -153,16 +181,17 @@ struct LibraryView: View {
                                             .font(.system(size: 16, weight: .semibold))
                                             .foregroundColor(isPlayingThis ? .cyan : .white)
                                             .lineLimit(1)
-                                        
-                                        HStack(spacing: 8) {
-                                            Text(localTrack.source == .google ? "Google Drive" : "Яндекс Диск")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.purple.opacity(0.8))
                                             
-                                            Text(formatSize(localTrack.size))
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.gray)
-                                        }
+                                            HStack(spacing: 8) {
+                                                Text(localTrack.artist ?? localTrack.source.displayName)
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.purple.opacity(0.8))
+                                                    .lineLimit(1)
+                                                
+                                                Text(formatSize(localTrack.size))
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.gray)
+                                            }
                                     }
                                     
                                     Spacer()
@@ -237,77 +266,93 @@ struct LibraryView: View {
                 }
                 Spacer()
             } else {
-                List {
-                    ForEach(playlistManager.playlists) { playlist in
-                        NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(LinearGradient(
-                                            colors: [.purple, .cyan],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ))
-                                        .frame(width: 48, height: 48)
-                                        .opacity(0.7)
-                                    
-                                    Image(systemName: "music.note.list")
-                                        .foregroundColor(.white)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(playlist.name)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(.white)
-                                    
-                                    Text("\(playlist.tracks.count) треков")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.gray)
-                                }
-                                
-                                Spacer()
+                if isGridView {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ForEach(playlistManager.playlists) { playlist in
+                                PlaylistGridCard(playlist: playlist)
                             }
-                            .padding(.vertical, 4)
                         }
-                        .listRowBackground(Color.white.opacity(0.04))
-                        .listRowSeparator(.hidden)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                playlistManager.deletePlaylist(id: playlist.id)
-                            } label: {
-                                Label("Удалить", systemImage: "trash")
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 80) // Отступ для мини-плеера внизу
+                    }
+                } else {
+                    List {
+                        ForEach(playlistManager.playlists) { playlist in
+                            NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
+                                HStack(spacing: 12) {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(LinearGradient(
+                                                colors: playlist.id == PlaylistManager.favoritesUUID ? [.pink, .purple] : [.purple, .cyan],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ))
+                                            .frame(width: 48, height: 48)
+                                            .opacity(0.7)
+                                        
+                                        Image(systemName: playlist.id == PlaylistManager.favoritesUUID ? "heart.fill" : "music.note.list")
+                                            .foregroundColor(.white)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(playlist.name)
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.white)
+                                        
+                                        Text("\(playlist.tracks.count) треков")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+                                    
+                                    Spacer()
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .listRowBackground(Color.white.opacity(0.04))
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                if playlist.id != PlaylistManager.favoritesUUID {
+                                    Button(role: .destructive) {
+                                        playlistManager.deletePlaylist(id: playlist.id)
+                                    } label: {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
                     }
+                    .listStyle(PlainListStyle())
+                    .background(Color.clear)
+                    .padding(.top, 8)
                 }
-                .listStyle(PlainListStyle())
-                .background(Color.clear)
-                .padding(.top, 8)
             }
         }
     }
     
-    /// Воспроизведение локального трека
     private func playLocalTrack(_ localTrack: LocalTrack) {
         let playerTrack = PlayerTrack(
             id: localTrack.id,
             title: localTrack.title,
-            artist: localTrack.source == .google ? "Google Drive" : "Яндекс Диск",
+            artist: localTrack.artist ?? localTrack.source.displayName,
             sourceName: "Офлайн Медиатека",
             localURL: localTrack.localURL,
             remoteURL: nil,
-            googleFileId: nil
+            googleFileId: nil,
+            localCoverURL: localTrack.localCoverURL
         )
         
         let queue = downloadManager.localTracks.map { track in
             PlayerTrack(
                 id: track.id,
                 title: track.title,
-                artist: track.source == .google ? "Google Drive" : "Яндекс Диск",
+                artist: track.artist ?? track.source.displayName,
                 sourceName: "Офлайн Медиатека",
                 localURL: track.localURL,
                 remoteURL: nil,
-                googleFileId: nil
+                googleFileId: nil,
+                localCoverURL: track.localCoverURL
             )
         }
         
@@ -335,11 +380,77 @@ extension LocalTrack {
         return PlaylistTrack(
             id: id,
             title: title,
-            artist: source == .google ? "Google Drive" : "Яндекс Диск",
+            artist: artist ?? source.displayName,
             sourceName: "Медиатека",
             localRelativePath: relativePath,
             remoteURLString: nil,
-            googleFileId: nil
+            googleFileId: nil,
+            localCoverPath: localCoverPath
         )
+    }
+}
+
+/// Карточка плейлиста в режиме сетки
+struct PlaylistGridCard: View {
+    let playlist: Playlist
+    @ObservedObject var playlistManager = PlaylistManager.shared
+    
+    var body: some View {
+        NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
+            VStack(spacing: 12) {
+                // Большая обложка плейлиста
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(LinearGradient(
+                            colors: playlist.id == PlaylistManager.favoritesUUID ? [.pink, .purple] : [.purple, .cyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .opacity(0.85)
+                    
+                    Image(systemName: playlist.id == PlaylistManager.favoritesUUID ? "heart.fill" : "music.note.list")
+                        .font(.system(size: 36))
+                        .foregroundColor(.white)
+                        .shadow(radius: 3)
+                }
+                .frame(height: 110)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .shadow(color: (playlist.id == PlaylistManager.favoritesUUID ? Color.pink : Color.purple).opacity(0.2), radius: 8, x: 0, y: 4)
+                
+                // Текст инфо
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(playlist.name)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text("\(playlist.tracks.count) треков")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color.white.opacity(0.05), lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            if playlist.id != PlaylistManager.favoritesUUID {
+                Button(role: .destructive, action: {
+                    playlistManager.deletePlaylist(id: playlist.id)
+                }) {
+                    Label("Удалить плейлист", systemImage: "trash")
+                }
+            }
+        }
     }
 }
