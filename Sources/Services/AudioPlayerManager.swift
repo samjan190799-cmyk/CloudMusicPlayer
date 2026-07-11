@@ -82,7 +82,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private func setupAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default, options: [.allowAirPlay, .defaultToSpeaker])
+            try audioSession.setCategory(.playback, mode: .default, options: [.allowAirPlay])
             try audioSession.setActive(true)
         } catch {
             print("Ошибка настройки AVAudioSession: \(error)")
@@ -222,6 +222,9 @@ class AudioPlayerManager: NSObject, ObservableObject {
         player?.pause()
         removeTimeObserver()
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        
+        // Активация аудиосессии перед началом воспроизведения
+        try? AVAudioSession.sharedInstance().setActive(true)
         
         var playerItem: AVPlayerItem? = nil
         
