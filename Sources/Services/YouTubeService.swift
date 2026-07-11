@@ -251,6 +251,8 @@ class YouTubeService: ObservableObject {
                 print("YouTubeKit ОШИБКА для видео \(videoId): \(error)")
                 DispatchQueue.main.async { completion(nil) }
             }
+        }
+    }
     
     /// Извлечение прямой ссылки на комбинированный видеопоток MP4 (для захвата кадров)
     func getVideoURL(for videoId: String, completion: @escaping (URL?) -> Void) {
