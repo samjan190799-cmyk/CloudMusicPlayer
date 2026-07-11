@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import UIKit
+import AVFoundation
 
 /// Источник трека
 enum TrackSource: String, Codable {
@@ -333,10 +335,10 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
             
             // Замыкание для записи в библиотеку
-            let saveTrack = { (finalArtist: String?, finalDuration: Double?, finalCoverPath: String?) in
+            let saveTrack = { (finalTitle: String, finalArtist: String?, finalDuration: Double?, finalCoverPath: String?) in
                 let newTrack = LocalTrack(
                     id: trackId,
-                    title: title,
+                    title: finalTitle,
                     source: source,
                     relativePath: relativeFilePath,
                     size: fileSize,
@@ -354,27 +356,66 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 }
             }
             
-            // Загрузка обложки и поиск метаданных
-            if source == .youtube {
-                if let thumbUrl = thumbnailUrl {
-                    self.downloadCover(from: thumbUrl, filename: trackId) { coverPath in
-                        saveTrack(artist, duration, coverPath)
-                    }
-                } else {
-                    saveTrack(artist, duration, nil)
-                }
-            } else {
-                // Скачано из облака (Google/Yandex) - ищем на YouTube
-                let searchQuery = title.sanitizedForSearch
-                YouTubeService.shared.findMetadata(for: searchQuery) { ytTrack in
-                    if let ytTrack = ytTrack {
-                        self.downloadCover(from: ytTrack.thumbnailUrl, filename: trackId) { coverPath in
-                            saveTrack(ytTrack.uploader, Double(ytTrack.duration), coverPath)
+            // Вспомогательная функция для продолжения сохранения
+            func proceedSaving(finalTitle: String, finalArtist: String?, finalDuration: Double?, finalCoverURL: URL?) {
+                if let coverURL = finalCoverURL {
+                    // Используем извлеченный кадр
+                    saveTrack(finalTitle, finalArtist, finalDuration, coverURL.path)
+                } else if source == .youtube {
+                    if let thumbUrl = thumbnailUrl {
+                        self.downloadCover(from: thumbUrl, filename: trackId) { coverPath in
+                            saveTrack(finalTitle, finalArtist, finalDuration, coverPath)
                         }
                     } else {
-                        saveTrack(nil, nil, nil)
+                        saveTrack(finalTitle, finalArtist, finalDuration, nil)
+                    }
+                } else {
+                    // Скачано из облака (Google/Yandex) - ищем на YouTube
+                    let searchQuery = finalTitle.sanitizedForSearch
+                    YouTubeService.shared.findMetadata(for: searchQuery) { ytTrack in
+                        if let ytTrack = ytTrack {
+                            self.downloadCover(from: ytTrack.thumbnailUrl, filename: trackId) { coverPath in
+                                saveTrack(finalTitle, ytTrack.uploader, Double(ytTrack.duration), coverPath)
+                            }
+                        } else {
+                            saveTrack(finalTitle, nil, nil, nil)
+                        }
                     }
                 }
+            }
+            
+            // Проверяем настройки ИИ
+            let providerRaw = UserDefaults.standard.string(forKey: "selectedAIProvider") ?? AIProvider.gemini.rawValue
+            let provider = AIProvider(rawValue: providerRaw) ?? .gemini
+            let activeApiKey: String
+            switch provider {
+            case .gemini: activeApiKey = UserDefaults.standard.string(forKey: "geminiApiKey") ?? ""
+            case .chatgpt: activeApiKey = UserDefaults.standard.string(forKey: "openaiApiKey") ?? ""
+            case .claude: activeApiKey = UserDefaults.standard.string(forKey: "anthropicApiKey") ?? ""
+            }
+            
+            let isAIEnabled = !activeApiKey.isEmpty
+            
+            if isAIEnabled && source == .youtube {
+                print("ИИ: очистка метаданных для видео '\(title)'...")
+                AIService.shared.cleanMetadata(rawTitle: title) { aiTitle, aiArtist in
+                    let finalTitle = aiTitle ?? title
+                    let finalArtist = aiArtist ?? artist
+                    print("ИИ: очищенные метаданные -> Title: '\(finalTitle)', Artist: '\(finalArtist ?? "")'")
+                    
+                    print("ИИ: получение видеопотока для захвата кадра...")
+                    YouTubeService.shared.getVideoURL(for: trackId) { videoURL in
+                        if let videoURL = videoURL {
+                            self.extractFrame(from: videoURL, filename: trackId) { coverURL in
+                                proceedSaving(finalTitle: finalTitle, finalArtist: finalArtist, finalDuration: duration, finalCoverURL: coverURL)
+                            }
+                        } else {
+                            proceedSaving(finalTitle: finalTitle, finalArtist: finalArtist, finalDuration: duration, finalCoverURL: nil)
+                        }
+                    }
+                }
+            } else {
+                proceedSaving(finalTitle: title, finalArtist: artist, finalDuration: duration, finalCoverURL: nil)
             }
             
         } catch {
@@ -397,6 +438,45 @@ extension DownloadManager: URLSessionDownloadDelegate {
             DispatchQueue.main.async {
                 self.activeDownloads.removeValue(forKey: trackId)
                 self.downloadTasks.removeValue(forKey: trackId)
+            }
+        }
+    }
+    
+    /// Извлечение кадра из видеопотока на 15-й секунде
+    func extractFrame(from videoURL: URL, filename: String, completion: @escaping (URL?) -> Void) {
+        let asset = AVAsset(url: videoURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        
+        let time = CMTime(seconds: 15.0, preferredTimescale: 600)
+        generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { _, cgImage, _, _, error in
+            if let cgImage = cgImage {
+                let image = UIImage(cgImage: cgImage)
+                if let data = image.jpegData(compressionQuality: 0.8) {
+                    let fileManager = FileManager.default
+                    guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                        completion(nil)
+                        return
+                    }
+                    let coversDir = documentsURL.appendingPathComponent("Covers", isDirectory: true)
+                    try? fileManager.createDirectory(at: coversDir, withIntermediateDirectories: true)
+                    let fileURL = coversDir.appendingPathComponent("\(filename).jpg")
+                    do {
+                        try data.write(to: fileURL)
+                        print("Кадр успешно извлечен и сохранен: \(fileURL.path)")
+                        completion(fileURL)
+                    } catch {
+                        print("Ошибка сохранения кадра на диск: \(error)")
+                        completion(nil)
+                    }
+                } else {
+                    completion(nil)
+                }
+            } else {
+                print("Ошибка извлечения кадра из видеопотока: \(error?.localizedDescription ?? "unknown error")")
+                completion(nil)
             }
         }
     }

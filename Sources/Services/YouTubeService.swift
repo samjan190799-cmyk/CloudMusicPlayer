@@ -251,6 +251,26 @@ class YouTubeService: ObservableObject {
                 print("YouTubeKit ОШИБКА для видео \(videoId): \(error)")
                 DispatchQueue.main.async { completion(nil) }
             }
+    
+    /// Извлечение прямой ссылки на комбинированный видеопоток MP4 (для захвата кадров)
+    func getVideoURL(for videoId: String, completion: @escaping (URL?) -> Void) {
+        Task {
+            do {
+                print("YouTubeKit: запрос видеопотока для видео \(videoId)...")
+                let video = YouTube(videoID: videoId, methods: [.remote, .local])
+                let streams = try await video.streams
+                let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
+                if let best = combined.first {
+                    print("YouTubeKit: выбран видеопоток MP4, url=\(best.url.absoluteString.prefix(80))...")
+                    DispatchQueue.main.async { completion(best.url) }
+                } else {
+                    print("YouTubeKit: нет комбинированных MP4 потоков")
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            } catch {
+                print("YouTubeKit ОШИБКА видеопотока: \(error)")
+                DispatchQueue.main.async { completion(nil) }
+            }
         }
     }
 }

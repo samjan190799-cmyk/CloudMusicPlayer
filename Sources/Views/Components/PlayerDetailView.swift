@@ -115,53 +115,52 @@ struct PlayerDetailView: View {
                         
                         // 3. Сам виниловый диск (вращающийся)
                         ZStack {
-                            // Тело винила (черный пластик)
-                            Circle()
-                                .fill(Color(white: 0.06))
-                                .frame(width: 240, height: 240)
-                                .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
+                            // Тело винила (черный пластик или Обложка на весь диск)
+                            if let coverURL = track.localCoverURL,
+                               let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 240, height: 240)
+                                    .clipShape(Circle())
+                                    .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
+                            } else {
+                                Circle()
+                                    .fill(Color(white: 0.06))
+                                    .frame(width: 240, height: 240)
+                                    .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
+                                
+                                // Бумажный ярлык по центру при отсутствии обложки
+                                Circle()
+                                    .fill(LinearGradient(
+                                        colors: [.purple, .cyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ))
+                                    .frame(width: 100, height: 100)
+                                
+                                // Первая буква названия трека по центру
+                                Text(String(track.title.first ?? "🎵").uppercased())
+                                    .font(.system(size: 38, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .shadow(radius: 2)
+                            }
                             
-                            // Световые отблески (эффект винилового блеска)
+                            // Световые отблески (эффект винилового блеска) поверх обложки
                             AngularGradient(
                                 gradient: Gradient(colors: [
-                                    .clear, .white.opacity(0.04), .clear, .white.opacity(0.04), .clear
+                                    .clear, .white.opacity(0.12), .clear, .white.opacity(0.12), .clear
                                 ]),
                                 center: .center
                             )
                             .frame(width: 240, height: 240)
                             .clipShape(Circle())
                             
-                            // Дорожки винила (тонкие концентрические круги)
-                            ForEach(0..<10) { i in
+                            // Дорожки винила (тонкие концентрические круги) поверх обложки
+                            ForEach(0..<15) { i in
                                 Circle()
-                                    .stroke(Color.white.opacity(0.03), lineWidth: 0.5)
-                                    .frame(width: CGFloat(90 + i * 14), height: CGFloat(90 + i * 14))
-                            }
-                            
-                            // Центральный бумажный ярлык (Album Art / Label)
-                            ZStack {
-                                if let coverURL = track.localCoverURL,
-                                   let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 80, height: 80)
-                                        .clipShape(Circle())
-                                } else {
-                                    Circle()
-                                        .fill(LinearGradient(
-                                            colors: [.purple, .cyan],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ))
-                                        .frame(width: 80, height: 80)
-                                    
-                                    // Первая буква названия трека по центру
-                                    Text(String(track.title.first ?? "🎵").uppercased())
-                                        .font(.system(size: 32, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .shadow(radius: 2)
-                                }
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                                    .frame(width: CGFloat(40 + i * 13), height: CGFloat(40 + i * 13))
                             }
                             
                             // Центральный шпиндель (металлический штырек)
@@ -171,8 +170,13 @@ struct PlayerDetailView: View {
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ))
-                                .frame(width: 8, height: 8)
+                                .frame(width: 10, height: 10)
                                 .shadow(radius: 1)
+                            
+                            // Маленькое центральное отверстие шпинделя
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 4, height: 4)
                         }
                         .rotationEffect(.degrees(rotationAngle))
                         

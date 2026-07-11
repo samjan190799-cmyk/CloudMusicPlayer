@@ -12,6 +12,10 @@ struct SettingsView: View {
     @State private var yandexToken = ""
     
     @AppStorage("autoDownloadFavorites") private var autoDownloadFavorites = true
+    @AppStorage("selectedAIProvider") private var selectedAIProvider = "gemini"
+    @AppStorage("geminiApiKey") private var geminiApiKey = ""
+    @AppStorage("openaiApiKey") private var openaiApiKey = ""
+    @AppStorage("anthropicApiKey") private var anthropicApiKey = ""
     
     // Статусы уведомлений
     @State private var showingAlert = false
@@ -264,6 +268,66 @@ struct SettingsView: View {
                                 }
                             }
                             .tint(.purple)
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                        
+                        // 5. Настройки ИИ (Интеллектуальное тегирование)
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Image(systemName: "cpu.fill")
+                                    .foregroundColor(.pink)
+                                    .font(.title3)
+                                Text("Настройки ИИ (Умное тегирование)")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            
+                            Text("Интегрируйте ИИ для автоматической очистки «грязных» названий видео с YouTube в чистые имена песен/артистов, а также для извлечения кадра высокого качества из клипа вместо стандартной размытой обложки.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                            
+                            Picker("ИИ Провайдер", selection: $selectedAIProvider) {
+                                Text("Gemini").tag("gemini")
+                                Text("ChatGPT").tag("chatgpt")
+                                Text("Claude").tag("claude")
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .padding(.vertical, 4)
+                            
+                            if selectedAIProvider == "gemini" {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Модель: Gemini 3.5 Flash")
+                                        .font(.caption)
+                                        .foregroundColor(.pink.opacity(0.8))
+                                    SecureField("Gemini API Key", text: $geminiApiKey)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .preferredColorScheme(.dark)
+                                }
+                            } else if selectedAIProvider == "chatgpt" {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Модель: GPT-5")
+                                        .font(.caption)
+                                        .foregroundColor(.pink.opacity(0.8))
+                                    SecureField("OpenAI API Key", text: $openaiApiKey)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .preferredColorScheme(.dark)
+                                }
+                            } else {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Модель: Claude 5 Sonnet")
+                                        .font(.caption)
+                                        .foregroundColor(.pink.opacity(0.8))
+                                    SecureField("Anthropic API Key", text: $anthropicApiKey)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .preferredColorScheme(.dark)
+                                }
+                            }
                         }
                         .padding(16)
                         .background(Color.white.opacity(0.04))

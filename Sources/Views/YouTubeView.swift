@@ -284,7 +284,9 @@ struct YouTubeView: View {
             sourceName: "YouTube (Онлайн)",
             localURL: nil,
             remoteURL: nil,
-            googleFileId: nil
+            googleFileId: nil,
+            localCoverURL: nil,
+            duration: Double(track.duration)
         )
         
         let queue = service.tracks.map { item in
@@ -295,7 +297,9 @@ struct YouTubeView: View {
                 sourceName: "YouTube (Онлайн)",
                 localURL: nil,
                 remoteURL: nil,
-                googleFileId: nil
+                googleFileId: nil,
+                localCoverURL: nil,
+                duration: Double(item.duration)
             )
         }
         
@@ -319,7 +323,8 @@ extension YouTubeTrack {
             sourceName: "YouTube",
             localRelativePath: nil,
             remoteURLString: nil,
-            googleFileId: nil
+            googleFileId: nil,
+            duration: Double(duration)
         )
     }
 }

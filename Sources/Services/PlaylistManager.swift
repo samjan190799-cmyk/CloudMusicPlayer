@@ -10,6 +10,7 @@ struct PlaylistTrack: Identifiable, Codable, Equatable {
     let remoteURLString: String?   // Если есть прямая онлайн-ссылка
     let googleFileId: String?      // ID файла в Google Drive
     var localCoverPath: String? = nil // Путь к локальной обложке
+    var duration: Double? = nil
     
     var localURL: URL? {
         guard let relativePath = localRelativePath else { return nil }

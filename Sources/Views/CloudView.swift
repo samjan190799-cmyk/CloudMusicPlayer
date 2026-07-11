@@ -410,7 +410,8 @@ extension TrackEnum {
                 sourceName: "Google Drive",
                 localRelativePath: nil,
                 remoteURLString: nil,
-                googleFileId: track.id
+                googleFileId: track.id,
+                duration: nil
             )
         case .yandex(let track):
             return PlaylistTrack(
@@ -420,7 +421,8 @@ extension TrackEnum {
                 sourceName: "Яндекс Диск",
                 localRelativePath: nil,
                 remoteURLString: nil,
-                googleFileId: nil
+                googleFileId: nil,
+                duration: nil
             )
         }
     }

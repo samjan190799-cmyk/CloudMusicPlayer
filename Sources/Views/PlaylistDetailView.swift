@@ -180,7 +180,8 @@ extension PlaylistTrack {
             localURL: localURL,
             remoteURL: remoteURL,
             googleFileId: googleFileId,
-            localCoverURL: localCoverURL
+            localCoverURL: localCoverURL,
+            duration: duration
         )
     }
 }

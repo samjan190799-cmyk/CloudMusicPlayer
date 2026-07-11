@@ -28,6 +28,7 @@ struct PlayerTrack: Identifiable, Equatable {
     let remoteURL: URL?
     let googleFileId: String? // Для получения авторизованного запроса
     var localCoverURL: URL? = nil // Локальный путь к обложке
+    var duration: Double? = nil
     
     static func == (lhs: PlayerTrack, rhs: PlayerTrack) -> Bool {
         return lhs.id == rhs.id
@@ -215,11 +216,12 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private func loadAndPlay(track: PlayerTrack) {
         playbackState = .loading
         currentTime = 0.0
-        duration = 0.0
+        duration = track.duration ?? 0.0
         
         // Сброс старого плеера
         player?.pause()
         removeTimeObserver()
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
         
         var playerItem: AVPlayerItem? = nil
         
@@ -304,7 +306,6 @@ class AudioPlayerManager: NSObject, ObservableObject {
         setupPlayer(with: item, track: track)
     }
     
-    /// Запуск кэширования трека в фоне
     private func triggerCaching(for track: PlayerTrack) {
         if track.googleFileId != nil {
             if let driveTrack = GoogleDriveService.shared.tracks.first(where: { $0.id == track.id }) {
@@ -317,16 +318,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     yandexPath: nil
                 )
             }
-        } else if track.sourceName.contains("YouTube") {
-            CacheManager.shared.cacheTrack(
-                trackId: track.id,
-                title: track.title,
-                source: .youtube,
-                size: 0,
-                googleFileId: nil,
-                yandexPath: nil
-            )
-        } else {
+        } else if track.sourceName.contains("Яндекс") || track.sourceName.contains("Yandex") {
             // Для Яндекса ищем трек в списке
             if let yandexTrack = YandexDiskService.shared.tracks.first(where: { $0.id == track.id }) {
                 CacheManager.shared.cacheTrack(
@@ -369,11 +361,13 @@ class AudioPlayerManager: NSObject, ObservableObject {
         item.publisher(for: \.status)
             .sink { [weak self] status in
                 if status == .readyToPlay {
-                    let seconds = CMTimeGetSeconds(item.duration)
-                    if !seconds.isNaN {
-                        self?.duration = seconds
-                        self?.updateNowPlayingInfo(for: track)
+                    let itemDuration = CMTimeGetSeconds(item.duration)
+                    if let trackDuration = track.duration, trackDuration > 0 {
+                        self?.duration = trackDuration
+                    } else if !itemDuration.isNaN {
+                        self?.duration = itemDuration
                     }
+                    self?.updateNowPlayingInfo(for: track)
                     self?.playbackState = .playing
                     self?.player?.play()
                 } else if status == .failed {
@@ -405,12 +399,15 @@ class AudioPlayerManager: NSObject, ObservableObject {
     }
     
     @objc private func playerItemDidReachEnd() {
-        if repeatMode == .one {
-            seek(to: 0)
-            player?.play()
-            playbackState = .playing
-        } else {
-            nextTrack()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.repeatMode == .one {
+                self.seek(to: 0)
+                self.player?.play()
+                self.playbackState = .playing
+            } else {
+                self.nextTrack()
+            }
         }
     }
     
@@ -581,7 +578,8 @@ extension PlayerTrack {
             localRelativePath: relativePath,
             remoteURLString: remoteURL?.absoluteString,
             googleFileId: googleFileId,
-            localCoverPath: coverRelPath
+            localCoverPath: coverRelPath,
+            duration: duration
         )
     }
 }

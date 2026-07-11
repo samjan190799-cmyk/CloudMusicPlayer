@@ -44,6 +44,7 @@ struct LibraryView: View {
                     Picker("Раздел", selection: $selectedSection) {
                         Text("Треки").tag(0)
                         Text("Плейлисты").tag(1)
+                        Text("Избранное").tag(2)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal, 16)
@@ -52,13 +53,16 @@ struct LibraryView: View {
                     if selectedSection == 0 {
                         // Раздел "Треки"
                         tracksSection
-                    } else {
+                    } else if selectedSection == 1 {
                         // Раздел "Плейлисты"
                         playlistsSection
+                    } else {
+                        // Раздел "Избранное"
+                        favoritesSection
                     }
                 }
             }
-            .navigationTitle(selectedSection == 0 ? "Моя Медиатека" : "Мои Плейлисты")
+            .navigationTitle(selectedSection == 0 ? "Моя Медиатека" : (selectedSection == 1 ? "Мои Плейлисты" : "Избранные песни"))
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectedSection == 0 {
@@ -74,7 +78,7 @@ struct LibraryView: View {
                                     .foregroundColor(.purple)
                             }
                         }
-                    } else {
+                    } else if selectedSection == 1 {
                         HStack(spacing: 16) {
                             Button(action: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -92,6 +96,19 @@ struct LibraryView: View {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.title2)
                                     .foregroundColor(.cyan)
+                            }
+                        }
+                    } else {
+                        // Избранное
+                        if !favoritesTracks.isEmpty {
+                            Button(action: {
+                                if let first = favoritesTracks.first {
+                                    playFavoriteTrack(first)
+                                }
+                            }) {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.pink)
                             }
                         }
                     }
@@ -340,7 +357,8 @@ struct LibraryView: View {
             localURL: localTrack.localURL,
             remoteURL: nil,
             googleFileId: nil,
-            localCoverURL: localTrack.localCoverURL
+            localCoverURL: localTrack.localCoverURL,
+            duration: localTrack.duration
         )
         
         let queue = downloadManager.localTracks.map { track in
@@ -352,7 +370,8 @@ struct LibraryView: View {
                 localURL: track.localURL,
                 remoteURL: nil,
                 googleFileId: nil,
-                localCoverURL: track.localCoverURL
+                localCoverURL: track.localCoverURL,
+                duration: track.duration
             )
         }
         
@@ -372,6 +391,141 @@ struct LibraryView: View {
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
+    
+    // Список отфильтрованных избранных треков
+    var favoritesTracks: [PlaylistTrack] {
+        let allFavorites = playlistManager.playlists.first(where: { $0.id == PlaylistManager.favoritesUUID })?.tracks ?? []
+        if searchText.isEmpty {
+            return allFavorites
+        } else {
+            return allFavorites.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        }
+    }
+    
+    // Секция избранного
+    private var favoritesSection: some View {
+        VStack {
+            // Поиск
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.gray)
+                TextField("Поиск в избранном...", text: $searchText)
+                    .foregroundColor(.white)
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(10)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            
+            if favoritesTracks.isEmpty {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "heart.slash")
+                        .font(.system(size: 64))
+                        .foregroundColor(.pink.opacity(0.6))
+                    
+                    Text(searchText.isEmpty ? "Нет избранных треков" : "Ничего не найдено")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    
+                    Text(searchText.isEmpty ? "Добавляйте треки в избранное с помощью кнопки-сердечка в плеере или меню YouTube." : "Попробуйте изменить поисковый запрос.")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                Spacer()
+            } else {
+                List {
+                    ForEach(favoritesTracks) { playlistTrack in
+                        let isPlayingThis = playerManager.currentTrack?.id == playlistTrack.id
+                        
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                playFavoriteTrack(playlistTrack)
+                            }) {
+                                HStack(spacing: 12) {
+                                    // Иконка / Обложка
+                                     ZStack {
+                                         if let coverURL = playlistTrack.localCoverURL,
+                                            let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                                             Image(uiImage: uiImage)
+                                                 .resizable()
+                                                 .scaledToFill()
+                                                 .frame(width: 44, height: 44)
+                                                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                                         } else {
+                                             RoundedRectangle(cornerRadius: 8)
+                                                 .fill(Color.white.opacity(0.08))
+                                                 .frame(width: 44, height: 44)
+                                             
+                                             Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
+                                                 .foregroundColor(isPlayingThis ? .cyan : .white)
+                                         }
+                                     }
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(playlistTrack.title)
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(isPlayingThis ? .cyan : .white)
+                                            .lineLimit(1)
+                                        
+                                        HStack(spacing: 8) {
+                                            Text(playlistTrack.artist)
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.purple.opacity(0.8))
+                                                .lineLimit(1)
+                                            
+                                            Text(playlistTrack.sourceName)
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            // Кнопка контекстного меню
+                            Menu {
+                                Button(action: {
+                                    playlistManager.removeTrack(trackId: playlistTrack.id, from: PlaylistManager.favoritesUUID)
+                                }) {
+                                    Label("Удалить из избранного", systemImage: "heart.slash.fill")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 12)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .listRowBackground(Color.white.opacity(0.04))
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                playlistManager.removeTrack(trackId: playlistTrack.id, from: PlaylistManager.favoritesUUID)
+                            } label: {
+                                Label("Удалить", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .listStyle(PlainListStyle())
+                .background(Color.clear)
+            }
+        }
+    }
+    
+    private func playFavoriteTrack(_ favoriteTrack: PlaylistTrack) {
+        let playerTrack = favoriteTrack.toPlayerTrack()
+        let favorites = playlistManager.playlists.first(where: { $0.id == PlaylistManager.favoritesUUID })
+        let queue = (favorites?.tracks ?? []).map { $0.toPlayerTrack() }
+        playerManager.play(track: playerTrack, in: queue)
+    }
 }
 
 // Расширение для конвертации
@@ -385,7 +539,8 @@ extension LocalTrack {
             localRelativePath: relativePath,
             remoteURLString: nil,
             googleFileId: nil,
-            localCoverPath: localCoverPath
+            localCoverPath: localCoverPath,
+            duration: duration
         )
     }
 }
