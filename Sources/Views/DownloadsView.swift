@@ -225,8 +225,30 @@ struct DownloadsView: View {
     }
     
     private func playLocalTrack(_ track: LocalTrack) {
-        let playerTrack = track.toPlayerTrack()
-        let queue = downloadManager.localTracks.map { $0.toPlayerTrack() }
+        let playerTrack = PlayerTrack(
+            id: track.id,
+            title: track.title,
+            artist: track.artist ?? track.source.displayName,
+            sourceName: "Загрузки",
+            localURL: track.localURL,
+            remoteURL: nil,
+            googleFileId: nil,
+            localCoverURL: track.localCoverURL,
+            duration: track.duration
+        )
+        let queue = downloadManager.localTracks.map { t in
+            PlayerTrack(
+                id: t.id,
+                title: t.title,
+                artist: t.artist ?? t.source.displayName,
+                sourceName: "Загрузки",
+                localURL: t.localURL,
+                remoteURL: nil,
+                googleFileId: nil,
+                localCoverURL: t.localCoverURL,
+                duration: t.duration
+            )
+        }
         playerManager.play(track: playerTrack, in: queue)
     }
     
