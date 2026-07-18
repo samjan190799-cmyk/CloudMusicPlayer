@@ -1,287 +1,253 @@
 import Foundation
-import YouTubeKit
 
 /// Модель трека с YouTube
 struct YouTubeTrack: Identifiable, Codable {
-    let id: String // videoId
+    let id: String          // videoId
     let title: String
     let uploader: String
-    let duration: Int // В секундах
+    let duration: Int       // В секундах
     let thumbnailUrl: String
 }
 
-/// Сервис для работы с API альтернативного фронтенда YouTube (Invidious)
+/// Сервис для работы с YouTube через Invidious API
+/// Поиск выполняется параллельно по нескольким инстансам — побеждает тот, кто ответил первым.
 class YouTubeService: ObservableObject {
     static let shared = YouTubeService()
-    
+
     @Published var tracks: [YouTubeTrack] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var canLoadMore = false
-    
+
     private var currentQuery = ""
     private var currentPage = 1
-    
-    // Список рабочих публичных инстансов Invidious для переключения в случае ошибок
-    // Примечание: инстансы используются ТОЛЬКО для поиска видео.
+    private var searchTask: Task<Void, Never>?
+
+    // MARK: - Список инстансов Invidious (публичные, проверены)
+    // Примечание: используются ТОЛЬКО для поиска видео.
     // Получение аудиопотоков выполняется через YouTubeKit напрямую.
     private let apiInstances = [
-        "https://yt.chocolatemoo53.com",
         "https://inv.nadeko.net",
+        "https://yewtu.be",
         "https://invidious.nerdvpn.de",
         "https://invidious.f5.si",
         "https://invidious.tiekoetter.com",
+        "https://yt.chocolatemoo53.com",
         "https://inv.zoomerville.com",
-        "https://yewtu.be"
+        "https://vid.puffyan.us",
+        "https://invidious.privacydev.net"
     ]
-    
-    private var activeInstanceIndex = 0
-    
-    private var currentInstance: String {
-        return apiInstances[activeInstanceIndex]
-    }
-    
+
     private init() {}
-    
-    /// Переключение на резервный инстанс
-    private func switchToNextInstance() {
-        activeInstanceIndex = (activeInstanceIndex + 1) % apiInstances.count
-        print("Переключение API Invidious на следующий инстанс: \(currentInstance)")
-    }
-    
-    /// Поиск треков (видео) на YouTube
+
+    // MARK: - Публичный API
+
+    /// Поиск треков — запускает гонку по всем инстансам одновременно
     func search(query: String) {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        
-        self.currentQuery = query
-        self.currentPage = 1
-        self.canLoadMore = false
-        self.isLoading = true
-        self.errorMessage = nil
-        
-        performSearchRequest(query: query, page: 1, retryCount: 0)
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+
+        searchTask?.cancel()
+        currentQuery = q
+        currentPage = 1
+        canLoadMore = false
+        errorMessage = nil
+
+        DispatchQueue.main.async { self.isLoading = true }
+
+        searchTask = Task {
+            await performParallelSearch(query: q, page: 1, appending: false)
+        }
     }
-    
-    /// Загрузка следующей страницы результатов
+
+    /// Подгрузка следующей страницы
     func loadMore() {
-        guard !isLoading && !currentQuery.isEmpty && canLoadMore else { return }
-        
-        self.isLoading = true
+        guard !isLoading, !currentQuery.isEmpty, canLoadMore else { return }
         let nextPage = currentPage + 1
-        
-        performSearchRequest(query: currentQuery, page: nextPage, retryCount: 0)
+
+        DispatchQueue.main.async { self.isLoading = true }
+
+        searchTask?.cancel()
+        searchTask = Task {
+            await performParallelSearch(query: currentQuery, page: nextPage, appending: true)
+        }
     }
-    
-    private func performSearchRequest(query: String, page: Int, retryCount: Int) {
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "\(currentInstance)/api/v1/search?q=\(encodedQuery)&type=video&page=\(page)"
-        
-        guard let url = URL(string: urlString) else {
-            self.isLoading = false
-            self.errorMessage = "Неверный URL поиска"
+
+    // MARK: - Параллельный поиск (race between instances)
+
+    @MainActor
+    private func performParallelSearch(query: String, page: Int, appending: Bool) async {
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+
+        // Запросы к каждому инстансу конкурируют. Добавляем параметр music — фильтр тематики
+        let results = await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
+            for instance in apiInstances {
+                let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=\(page)"
+                guard let url = URL(string: urlStr) else { continue }
+
+                group.addTask { [weak self] in
+                    guard let self else { return nil }
+                    return await self.fetchSearchResults(from: url)
+                }
+            }
+
+            // Возвращаем первый непустой ответ
+            for await result in group {
+                if let r = result, !r.isEmpty {
+                    group.cancelAll()
+                    return r
+                }
+            }
+            return nil
+        }
+
+        isLoading = false
+
+        guard let items = results, !items.isEmpty else {
+            if !appending {
+                errorMessage = "Ничего не найдено. Попробуйте другой запрос или проверьте интернет."
+            }
+            canLoadMore = false
             return
         }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                print("Ошибка запроса к \(self.currentInstance): \(error.localizedDescription)")
-                self.handleSearchFailure(query: query, page: page, retryCount: retryCount, errorMsg: error.localizedDescription)
-                return
-            }
-            
-            guard let data = data else {
-                self.handleSearchFailure(query: query, page: page, retryCount: retryCount, errorMsg: "Пустой ответ сервера")
-                return
-            }
-            
-            do {
-                let items = try JSONDecoder().decode([InvidiousSearchResult].self, from: data)
-                DispatchQueue.main.async {
-                    let newTracks = items.map { item in
-                        YouTubeTrack(
-                            id: item.videoId,
-                            title: item.title,
-                            uploader: item.author,
-                            duration: item.lengthSeconds,
-                            thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/hqdefault.jpg"
-                        )
-                    }
-                    if page == 1 {
-                        self.tracks = newTracks
-                    } else {
-                        self.tracks.append(contentsOf: newTracks)
-                    }
-                    self.currentPage = page
-                    self.canLoadMore = !newTracks.isEmpty && newTracks.count >= 15
-                    self.isLoading = false
-                }
-            } catch {
-                print("Ошибка парсинга ответа от \(self.currentInstance): \(error.localizedDescription)")
-                self.handleSearchFailure(query: query, page: page, retryCount: retryCount, errorMsg: "Ошибка декодирования результатов")
-            }
-        }.resume()
-    }
-    
-    private func handleSearchFailure(query: String, page: Int, retryCount: Int, errorMsg: String) {
-        if retryCount < apiInstances.count - 1 {
-            switchToNextInstance()
-            performSearchRequest(query: query, page: page, retryCount: retryCount + 1)
+
+        let newTracks = items.map { item in
+            YouTubeTrack(
+                id: item.videoId,
+                title: item.title,
+                uploader: item.author,
+                duration: item.lengthSeconds,
+                // Цепочка качества: maxres → hq → mq (loadable fallback в View)
+                thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
+            )
+        }
+
+        if appending {
+            tracks.append(contentsOf: newTracks)
         } else {
-            DispatchQueue.main.async {
-                self.isLoading = false
-                self.errorMessage = "Не удалось выполнить поиск. Проверьте подключение к сети. (\(errorMsg))"
+            tracks = newTracks
+        }
+
+        currentPage = page
+        // YouTube возвращает до 20 результатов на страницу
+        canLoadMore = newTracks.count >= 15
+        errorMessage = nil
+    }
+
+    private func fetchSearchResults(from url: URL) async -> [InvidiousSearchResult]? {
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 6 // Таймаут 6 секунд — быстро отсекаем медленные инстансы
+            request.setValue("CloudMusicPlayer/1.0", forHTTPHeaderField: "User-Agent")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
             }
+
+            return try JSONDecoder().decode([InvidiousSearchResult].self, from: data)
+        } catch {
+            return nil
         }
     }
-    
-    /// Standalone search method to find a matching track metadata
+
+    // MARK: - Поиск метаданных (для DownloadManager)
+
     func findMetadata(for query: String, completion: @escaping (YouTubeTrack?) -> Void) {
-        performMetadataSearch(query: query, retryCount: 0, completion: completion)
-    }
-    
-    private func performMetadataSearch(query: String, retryCount: Int, completion: @escaping (YouTubeTrack?) -> Void) {
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "\(apiInstances[retryCount % apiInstances.count])/api/v1/search?q=\(encodedQuery)&type=video&page=1"
-        
-        guard let url = URL(string: urlString) else {
-            completion(nil)
-            return
-        }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            if let error = error {
-                print("findMetadata error: \(error.localizedDescription)")
-                self?.retryMetadataSearch(query: query, retryCount: retryCount + 1, completion: completion)
-                return
-            }
-            
-            guard let data = data else {
-                self?.retryMetadataSearch(query: query, retryCount: retryCount + 1, completion: completion)
-                return
-            }
-            
-            do {
-                let items = try JSONDecoder().decode([InvidiousSearchResult].self, from: data)
-                if let first = items.first {
-                    let track = YouTubeTrack(
-                        id: first.videoId,
-                        title: first.title,
-                        uploader: first.author,
-                        duration: first.lengthSeconds,
-                        thumbnailUrl: "https://img.youtube.com/vi/\(first.videoId)/hqdefault.jpg"
-                    )
-                    completion(track)
-                } else {
-                    completion(nil)
+        Task {
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            let results = await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
+                for instance in apiInstances {
+                    let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=1"
+                    guard let url = URL(string: urlStr) else { continue }
+                    group.addTask { [weak self] in await self?.fetchSearchResults(from: url) }
                 }
-            } catch {
-                self?.retryMetadataSearch(query: query, retryCount: retryCount + 1, completion: completion)
+                for await result in group {
+                    if let r = result, !r.isEmpty { group.cancelAll(); return r }
+                }
+                return nil
             }
-        }.resume()
-    }
-    
-    private func retryMetadataSearch(query: String, retryCount: Int, completion: @escaping (YouTubeTrack?) -> Void) {
-        if retryCount < apiInstances.count {
-            performMetadataSearch(query: query, retryCount: retryCount, completion: completion)
-        } else {
-            completion(nil)
+
+            guard let first = results?.first else {
+                completion(nil)
+                return
+            }
+
+            let track = YouTubeTrack(
+                id: first.videoId,
+                title: first.title,
+                uploader: first.author,
+                duration: first.lengthSeconds,
+                thumbnailUrl: "https://img.youtube.com/vi/\(first.videoId)/maxresdefault.jpg"
+            )
+            completion(track)
         }
     }
-    
-    // MARK: - Извлечение прямой ссылки на аудиопоток через YouTubeKit
-    
-    /// Извлечение прямой ссылки на аудиопоток по ID видео.
-    /// Использует YouTubeKit — нативную Swift-библиотеку, которая извлекает URL
-    /// напрямую с серверов YouTube без посредников (Invidious/Piped).
+
+    // MARK: - Извлечение аудиопотока через YouTubeKit
+
+    /// Получение прямой ссылки на аудиопоток по ID видео.
+    /// YouTubeKit — нативная Swift-библиотека, извлекает URL напрямую с серверов YouTube
+    /// без посредников. API ключи здесь НЕ нужны — всё работает через открытый YouTube API.
     func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         Task {
             do {
-                print("YouTubeKit: запрос потоков для видео \(videoId)...")
                 let video = YouTube(videoID: videoId, methods: [.remote, .local])
                 let streams = try await video.streams
-                
-                print("YouTubeKit: получено \(streams.count) потоков")
-                
-                // Получаем только аудио потоки
+
+                // Приоритет 1: M4A (AAC) — лучшая совместимость с AVPlayer
                 let audioOnly = streams.filterAudioOnly()
-                print("YouTubeKit: аудио-потоков: \(audioOnly.count)")
-                
-                // Логируем все доступные аудио потоки для диагностики
-                for (i, stream) in audioOnly.enumerated() {
-                    let codecStr = stream.audioCodec.map { String(describing: $0) } ?? "nil"
-                    print("  [\(i)] ext=\(stream.fileExtension.rawValue), codec=\(codecStr), bitrate=\(stream.bitrate ?? 0)")
+                let m4a = audioOnly.filter { $0.fileExtension == .m4a }
+                if let best = m4a.highestAudioBitrateStream() {
+                    completion(best.url); return
                 }
-                
-                // ПРИОРИТЕТ 1: Ищем M4A (AAC) — единственный формат, который AVPlayer поддерживает
-                let m4aStreams = audioOnly.filter { $0.fileExtension == .m4a }
-                if let bestM4A = m4aStreams.highestAudioBitrateStream() {
-                    print("YouTubeKit: выбран M4A поток, bitrate=\(bestM4A.bitrate ?? 0), url=\(bestM4A.url.absoluteString.prefix(80))...")
-                    DispatchQueue.main.async { completion(bestM4A.url) }
-                    return
+
+                // Приоритет 2: MP4-аудио
+                let mp4audio = audioOnly.filter { $0.fileExtension == .mp4 }
+                if let best = mp4audio.highestAudioBitrateStream() {
+                    completion(best.url); return
                 }
-                
-                // ПРИОРИТЕТ 2: MP4 аудио
-                let mp4Streams = audioOnly.filter { $0.fileExtension == .mp4 }
-                if let bestMP4 = mp4Streams.highestAudioBitrateStream() {
-                    print("YouTubeKit: выбран MP4 аудио поток, bitrate=\(bestMP4.bitrate ?? 0)")
-                    DispatchQueue.main.async { completion(bestMP4.url) }
-                    return
+
+                // Приоритет 3: Любой аудиопоток
+                if let any = audioOnly.highestAudioBitrateStream() {
+                    completion(any.url); return
                 }
-                
-                // ПРИОРИТЕТ 3: Любой комбинированный поток MP4 (видео+аудио)
+
+                // Приоритет 4: Комбинированный MP4
                 let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
                 if let fallback = combined.first {
-                    print("YouTubeKit: используем комбинированный MP4 поток (видео+аудио)")
-                    DispatchQueue.main.async { completion(fallback.url) }
-                    return
+                    completion(fallback.url); return
                 }
-                
-                // ПРИОРИТЕТ 4: Любой аудио поток (последний шанс, может не воспроизводиться)
-                if let anyAudio = audioOnly.highestAudioBitrateStream() {
-                    print("YouTubeKit: ПРЕДУПРЕЖДЕНИЕ — используем \(anyAudio.fileExtension.rawValue) поток (может не работать с AVPlayer)")
-                    DispatchQueue.main.async { completion(anyAudio.url) }
-                    return
-                }
-                
-                print("YouTubeKit: НЕТ доступных аудиопотоков для видео \(videoId)")
-                DispatchQueue.main.async { completion(nil) }
+
+                completion(nil)
             } catch {
-                print("YouTubeKit ОШИБКА для видео \(videoId): \(error)")
-                DispatchQueue.main.async { completion(nil) }
+                print("YouTubeKit error [\(videoId)]: \(error)")
+                completion(nil)
             }
         }
     }
-    
-    /// Извлечение прямой ссылки на комбинированный видеопоток MP4 (для захвата кадров)
+
+    /// Получение видеопотока (для превью кадров)
     func getVideoURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         Task {
             do {
-                print("YouTubeKit: запрос видеопотока для видео \(videoId)...")
                 let video = YouTube(videoID: videoId, methods: [.remote, .local])
                 let streams = try await video.streams
                 let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
-                if let best = combined.first {
-                    print("YouTubeKit: выбран видеопоток MP4, url=\(best.url.absoluteString.prefix(80))...")
-                    DispatchQueue.main.async { completion(best.url) }
-                } else {
-                    print("YouTubeKit: нет комбинированных MP4 потоков")
-                    DispatchQueue.main.async { completion(nil) }
-                }
+                completion(combined.first?.url)
             } catch {
-                print("YouTubeKit ОШИБКА видеопотока: \(error)")
-                DispatchQueue.main.async { completion(nil) }
+                completion(nil)
             }
         }
     }
 }
 
-// MARK: - Вспомогательные структуры ответов API Invidious (используются только для поиска)
+// MARK: - Модель ответа Invidious
+
 struct InvidiousSearchResult: Codable {
     let videoId: String
     let title: String
     let author: String
     let lengthSeconds: Int
 }
-
