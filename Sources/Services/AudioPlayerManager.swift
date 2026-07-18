@@ -84,8 +84,40 @@ class AudioPlayerManager: NSObject, ObservableObject {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playback, mode: .default, options: [.allowAirPlay])
             try audioSession.setActive(true)
+            
+            // Подписка на прерывания (звонки, будильники)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleAudioInterruption),
+                name: AVAudioSession.interruptionNotification,
+                object: nil
+            )
         } catch {
             print("Ошибка настройки AVAudioSession: \(error)")
+        }
+    }
+    
+    @objc private func handleAudioInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+        
+        if type == .began {
+            DispatchQueue.main.async { [weak self] in
+                self?.player?.pause()
+                self?.playbackState = .paused
+                self?.updateNowPlayingPlaybackState()
+            }
+        } else if type == .ended {
+            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            if options.contains(.shouldResume) {
+                DispatchQueue.main.async { [weak self] in
+                    self?.player?.play()
+                    self?.playbackState = .playing
+                    self?.updateNowPlayingPlaybackState()
+                }
+            }
         }
     }
     
@@ -347,10 +379,17 @@ class AudioPlayerManager: NSObject, ObservableObject {
     }
     
     private func setupPlayer(with item: AVPlayerItem, track: PlayerTrack) {
-        player = AVPlayer(playerItem: item)
+        cancellables.removeAll()
+        
+        if let existingPlayer = player {
+            existingPlayer.replaceCurrentItem(with: item)
+        } else {
+            player = AVPlayer(playerItem: item)
+        }
+        
         player?.volume = volume
         player?.isMuted = isMuted
-        player?.automaticallyWaitsToMinimizeStalling = false
+        player?.automaticallyWaitsToMinimizeStalling = true
         
         // Наблюдатели за окончанием трека и изменением статуса
         NotificationCenter.default.addObserver(
@@ -381,6 +420,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
             .store(in: &cancellables)
         
         // Обсервация текущего времени проигрывания
+        removeTimeObserver()
         let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
