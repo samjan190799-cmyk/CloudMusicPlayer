@@ -202,15 +202,18 @@ struct PlayerDetailView: View {
                 .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.6), value: visualizerEngine.heights[0])
             
             // Стеклянный стол проигрывателя (Glassmorphism)
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color.white.opacity(0.04))
-                .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 24)))
-                .frame(width: 290, height: 290)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.4), radius: 15, x: 0, y: 8)
+            ZStack {
+                VisualEffectBlur(material: .systemUltraThinMaterial)
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.white.opacity(0.04))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .frame(width: 290, height: 290)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.4), radius: 15, x: 0, y: 8)
             
             // Металлические винтики по углам корпуса
             Group {
@@ -621,9 +624,12 @@ struct PlayerDetailView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.05))
-                .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 14)))
+            ZStack {
+                VisualEffectBlur(material: .systemUltraThinMaterial)
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.white.opacity(0.05))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14)

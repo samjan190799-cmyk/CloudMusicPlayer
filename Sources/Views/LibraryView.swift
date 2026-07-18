@@ -159,9 +159,12 @@ struct LibraryView: View {
         }
         .padding(4)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
-                .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 16)))
+            ZStack {
+                VisualEffectBlur(material: .systemUltraThinMaterial)
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.05))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16)

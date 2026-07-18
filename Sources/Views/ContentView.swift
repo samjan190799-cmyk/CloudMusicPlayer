@@ -79,13 +79,14 @@ struct ContentView: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
         .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color(red: 0.08, green: 0.05, blue: 0.15).opacity(0.75))
-                .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.purple.opacity(0.03))
-                )
-                .background(VisualEffectBlur(material: .systemUltraThinMaterial))
+            ZStack {
+                VisualEffectBlur(material: .systemUltraThinMaterial)
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color(red: 0.08, green: 0.05, blue: 0.15).opacity(0.75))
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.purple.opacity(0.03))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24)
