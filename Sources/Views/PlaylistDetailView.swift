@@ -27,6 +27,18 @@ struct PlaylistDetailView: View {
                 // Заголовок и инфо о плейлисте
                 VStack(spacing: 12) {
                     ZStack {
+                        // Фоновое размытое свечение (ambient glow)
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: playlist.id == PlaylistManager.favoritesUUID ? [.pink, .purple] : [.purple, .cyan],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .frame(width: 160, height: 160)
+                            .blur(radius: 35)
+                            .opacity(0.35)
+                            .offset(y: -5)
+                        
                         RoundedRectangle(cornerRadius: 16)
                             .fill(LinearGradient(
                                 colors: playlist.id == PlaylistManager.favoritesUUID ? [.pink, .purple] : [.purple, .cyan],
@@ -54,6 +66,7 @@ struct PlaylistDetailView: View {
                     // Кнопка "Воспроизвести всё"
                     if !currentPlaylist.tracks.isEmpty {
                         Button(action: {
+                            HapticManager.shared.triggerImpact(style: .medium)
                             playAll()
                         }) {
                             HStack(spacing: 8) {
@@ -72,6 +85,7 @@ struct PlaylistDetailView: View {
                             .cornerRadius(28)
                             .shadow(color: .cyan.opacity(0.3), radius: 8, x: 0, y: 4)
                         }
+                        .buttonStyle(ScaleButtonStyle())
                         .padding(.top, 8)
                     }
                 }
@@ -112,11 +126,13 @@ struct PlaylistDetailView: View {
                                                  .clipShape(RoundedRectangle(cornerRadius: 8))
                                          } else {
                                              RoundedRectangle(cornerRadius: 8)
-                                                 .fill(Color.white.opacity(0.06))
+                                                 .fill(placeholderGradient(for: playlistTrack.title))
                                                  .frame(width: 40, height: 40)
+                                                 .opacity(0.85)
                                              
                                              Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
-                                                 .foregroundColor(isPlayingThis ? .cyan : .white)
+                                                 .foregroundColor(.white)
+                                                 .font(.system(size: 13))
                                          }
                                      }
                                     
@@ -167,6 +183,24 @@ struct PlaylistDetailView: View {
         guard let first = currentPlaylist.tracks.first else { return }
         playTrack(first)
     }
+    
+    /// Генерирует уникальный градиент для плейсхолдера обложки трека на основе хеша названия
+    private func placeholderGradient(for title: String) -> LinearGradient {
+        let colors: [[Color]] = [
+            [.blue, .purple],
+            [.purple, .pink],
+            [.pink, .orange],
+            [.orange, .yellow],
+            [.teal, .blue],
+            [.green, .teal]
+        ]
+        let index = abs(title.hashValue) % colors.count
+        return LinearGradient(
+            colors: colors[index],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 // Вспомогательное расширение для приведения типов
@@ -183,5 +217,14 @@ extension PlaylistTrack {
             localCoverURL: localCoverURL,
             duration: duration
         )
+    }
+}
+
+/// Анимация масштабирования кнопок при нажатии
+private struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }

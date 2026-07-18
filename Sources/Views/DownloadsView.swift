@@ -131,7 +131,7 @@ struct DownloadsView: View {
                                     }) {
                                         HStack(spacing: 12) {
                                             // Обложка / Иконка
-                                            ZStack {
+                                            ZStack(alignment: .bottomTrailing) {
                                                 if let coverURL = localTrack.localCoverURL,
                                                    let uiImage = UIImage(contentsOfFile: coverURL.path) {
                                                     Image(uiImage: uiImage)
@@ -139,13 +139,28 @@ struct DownloadsView: View {
                                                         .scaledToFill()
                                                         .frame(width: 44, height: 44)
                                                         .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    
+                                                    if isPlayingThis && playerManager.playbackState == .playing {
+                                                        ZStack {
+                                                            RoundedRectangle(cornerRadius: 3)
+                                                                .fill(Color.black.opacity(0.6))
+                                                                .frame(width: 18, height: 16)
+                                                            
+                                                            MiniVisualizerView(isPlaying: true)
+                                                        }
+                                                        .padding(2)
+                                                    }
                                                 } else {
                                                     RoundedRectangle(cornerRadius: 8)
                                                         .fill(Color.white.opacity(0.08))
                                                         .frame(width: 44, height: 44)
                                                     
-                                                    Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
-                                                        .foregroundColor(isPlayingThis ? .cyan : .white)
+                                                    if isPlayingThis && playerManager.playbackState == .playing {
+                                                        MiniVisualizerView(isPlaying: true)
+                                                    } else {
+                                                        Image(systemName: "music.note")
+                                                            .foregroundColor(isPlayingThis ? .cyan : .white)
+                                                    }
                                                 }
                                             }
                                             

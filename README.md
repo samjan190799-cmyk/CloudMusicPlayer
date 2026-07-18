@@ -1,5 +1,7 @@
 # Cloud Music Player (iOS) — Нативный музыкальный плеер
 
+[![Build CloudMusicPlayer iOS IPA](https://github.com/samjan190799-cmyk/CloudMusicPlayer/actions/workflows/swift-ci.yml/badge.svg)](https://github.com/samjan190799-cmyk/CloudMusicPlayer/actions/workflows/swift-ci.yml)
+
 Нативное мобильное приложение для iOS (iOS 16+), разработанное на языке **Swift** с использованием современного декларативного фреймворка **SwiftUI**. Приложение позволяет прослушивать музыку как в режиме онлайн-стриминга, так и офлайн (скачивая треки в память устройства) из ваших аккаунтов Google Диска и Яндекс Диска.
 
 ---

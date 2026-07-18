@@ -63,6 +63,9 @@ struct ContentView: View {
                     .tag(5)
             }
             .accentColor(.cyan) // Активный цвет вкладок
+            .onChange(of: selectedTab) { _ in
+                HapticManager.shared.triggerSelection()
+            }
             
             // Всплывающий мини-плеер внизу экрана
             if playerManager.currentTrack != nil {

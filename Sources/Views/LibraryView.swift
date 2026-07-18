@@ -49,6 +49,9 @@ struct LibraryView: View {
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
+                    .onChange(of: selectedSection) { _ in
+                        HapticManager.shared.triggerSelection()
+                    }
                     
                     if selectedSection == 0 {
                         // Раздел "Треки"
@@ -174,7 +177,7 @@ struct LibraryView: View {
                             }) {
                                 HStack(spacing: 12) {
                                      // Иконка / Обложка
-                                     ZStack {
+                                     ZStack(alignment: .bottomTrailing) {
                                          if let coverURL = localTrack.localCoverURL,
                                             let uiImage = UIImage(contentsOfFile: coverURL.path) {
                                              Image(uiImage: uiImage)
@@ -182,13 +185,30 @@ struct LibraryView: View {
                                                  .scaledToFill()
                                                  .frame(width: 44, height: 44)
                                                  .clipShape(RoundedRectangle(cornerRadius: 8))
+                                             
+                                             if isPlayingThis && playerManager.playbackState == .playing {
+                                                 ZStack {
+                                                     RoundedRectangle(cornerRadius: 3)
+                                                         .fill(Color.black.opacity(0.6))
+                                                         .frame(width: 18, height: 16)
+                                                     
+                                                     MiniVisualizerView(isPlaying: true)
+                                                 }
+                                                 .padding(2)
+                                             }
                                          } else {
                                              RoundedRectangle(cornerRadius: 8)
-                                                 .fill(Color.white.opacity(0.08))
+                                                 .fill(placeholderGradient(for: localTrack.title))
                                                  .frame(width: 44, height: 44)
+                                                 .opacity(0.85)
                                              
-                                             Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
-                                                 .foregroundColor(isPlayingThis ? .cyan : .white)
+                                             if isPlayingThis && playerManager.playbackState == .playing {
+                                                 MiniVisualizerView(isPlaying: true, tintColor: .white)
+                                             } else {
+                                                 Image(systemName: "music.note")
+                                                     .foregroundColor(.white)
+                                                     .font(.system(size: 14))
+                                             }
                                          }
                                      }
                                     
@@ -430,7 +450,7 @@ struct LibraryView: View {
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
                     
-                    Text(searchText.isEmpty ? "Добавляйте треки в избранное с помощью кнопки-сердечка в плеере или меню YouTube." : "Попробуйте изменить поисковый запрос.")
+                    Text(searchText.isEmpty ? "Добавляйте треки в избранное с помощью кнопки сердечка в плеере." : "Попробуйте изменить поисковый запрос.")
                         .font(.system(size: 14))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
@@ -447,8 +467,8 @@ struct LibraryView: View {
                                 playFavoriteTrack(playlistTrack)
                             }) {
                                 HStack(spacing: 12) {
-                                    // Иконка / Обложка
-                                     ZStack {
+                                     // Иконка / Обложка
+                                     ZStack(alignment: .bottomTrailing) {
                                          if let coverURL = playlistTrack.localCoverURL,
                                             let uiImage = UIImage(contentsOfFile: coverURL.path) {
                                              Image(uiImage: uiImage)
@@ -456,13 +476,30 @@ struct LibraryView: View {
                                                  .scaledToFill()
                                                  .frame(width: 44, height: 44)
                                                  .clipShape(RoundedRectangle(cornerRadius: 8))
+                                             
+                                             if isPlayingThis && playerManager.playbackState == .playing {
+                                                 ZStack {
+                                                     RoundedRectangle(cornerRadius: 3)
+                                                         .fill(Color.black.opacity(0.6))
+                                                         .frame(width: 18, height: 16)
+                                                     
+                                                     MiniVisualizerView(isPlaying: true)
+                                                 }
+                                                 .padding(2)
+                                             }
                                          } else {
                                              RoundedRectangle(cornerRadius: 8)
-                                                 .fill(Color.white.opacity(0.08))
+                                                 .fill(placeholderGradient(for: playlistTrack.title))
                                                  .frame(width: 44, height: 44)
+                                                 .opacity(0.85)
                                              
-                                             Image(systemName: isPlayingThis ? "speaker.wave.3.fill" : "music.note")
-                                                 .foregroundColor(isPlayingThis ? .cyan : .white)
+                                             if isPlayingThis && playerManager.playbackState == .playing {
+                                                 MiniVisualizerView(isPlaying: true, tintColor: .white)
+                                             } else {
+                                                 Image(systemName: "music.note")
+                                                     .foregroundColor(.white)
+                                                     .font(.system(size: 14))
+                                             }
                                          }
                                      }
                                     
@@ -525,6 +562,24 @@ struct LibraryView: View {
         let favorites = playlistManager.playlists.first(where: { $0.id == PlaylistManager.favoritesUUID })
         let queue = (favorites?.tracks ?? []).map { $0.toPlayerTrack() }
         playerManager.play(track: playerTrack, in: queue)
+    }
+    
+    /// Генерирует уникальный градиент для плейсхолдера обложки трека на основе хеша названия
+    private func placeholderGradient(for title: String) -> LinearGradient {
+        let colors: [[Color]] = [
+            [.blue, .purple],
+            [.purple, .pink],
+            [.pink, .orange],
+            [.orange, .yellow],
+            [.teal, .blue],
+            [.green, .teal]
+        ]
+        let index = abs(title.hashValue) % colors.count
+        return LinearGradient(
+            colors: colors[index],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -597,7 +652,7 @@ struct PlaylistGridCard: View {
                     .stroke(Color.white.opacity(0.05), lineWidth: 1)
             )
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(ScaleButtonStyle())
         .contextMenu {
             if playlist.id != PlaylistManager.favoritesUUID {
                 Button(role: .destructive, action: {
@@ -607,5 +662,14 @@ struct PlaylistGridCard: View {
                 }
             }
         }
+    }
+}
+
+/// Анимация масштабирования кнопок при нажатии
+private struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
