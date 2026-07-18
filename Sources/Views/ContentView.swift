@@ -85,7 +85,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 24)
                         .fill(Color.purple.opacity(0.03))
                 )
-                .background(VisualEffectBlur(material: .systemUltraThinMaterial, blendingMode: .withinWindow))
+                .background(VisualEffectBlur(material: .systemUltraThinMaterial))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24)
