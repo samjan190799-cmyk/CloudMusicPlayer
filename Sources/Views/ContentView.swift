@@ -38,29 +38,23 @@ struct ContentView: View {
                     }
                     .tag(1)
                 
-                CloudView(source: .google, selectedTab: $selectedTab)
+                CloudHubView(selectedTab: $selectedTab)
                     .tabItem {
-                        Label("Google Диск", systemImage: "cloud.fill")
+                        Label("Облако", systemImage: "cloud.fill")
                     }
                     .tag(2)
-                
-                CloudView(source: .yandex, selectedTab: $selectedTab)
-                    .tabItem {
-                        Label("Яндекс Диск", systemImage: "icloud.fill")
-                    }
-                    .tag(3)
                 
                 YouTubeView()
                     .tabItem {
                         Label("YouTube", systemImage: "play.rectangle.fill")
                     }
-                    .tag(4)
+                    .tag(3)
                 
                 SettingsView()
                     .tabItem {
                         Label("Настройки", systemImage: "gearshape.fill")
                     }
-                    .tag(5)
+                    .tag(4)
             }
             .accentColor(.cyan) // Активный цвет вкладок
             .onChange(of: selectedTab) { _ in

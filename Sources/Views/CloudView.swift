@@ -85,7 +85,7 @@ struct CloudView: View {
                             
                             Button(action: {
                                 withAnimation {
-                                    selectedTab = 5 // Настройки (шестой таб)
+                                    selectedTab = 4 // Настройки (пятый таб)
                                 }
                             }) {
                                 Text("Перейти в настройки")
