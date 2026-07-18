@@ -10,8 +10,8 @@ struct YouTubeTrack: Identifiable, Codable {
     let thumbnailUrl: String
 }
 
-/// Сервис для работы с YouTube через Invidious API
-/// Поиск выполняется параллельно по нескольким инстансам — побеждает тот, кто ответил первым.
+/// Сервис для работы с YouTube через Invidious API.
+/// Поиск выполняется параллельно по нескольким инстансам — побеждает первый ответивший.
 class YouTubeService: ObservableObject {
     static let shared = YouTubeService()
 
@@ -24,9 +24,7 @@ class YouTubeService: ObservableObject {
     private var currentPage = 1
     private var searchTask: Task<Void, Never>?
 
-    // MARK: - Список инстансов Invidious (публичные, проверены)
-    // Примечание: используются ТОЛЬКО для поиска видео.
-    // Получение аудиопотоков выполняется через YouTubeKit напрямую.
+    // Список Invidious-инстансов (только для поиска, аудио идёт через YouTubeKit напрямую)
     private let apiInstances = [
         "https://inv.nadeko.net",
         "https://yewtu.be",
@@ -43,7 +41,7 @@ class YouTubeService: ObservableObject {
 
     // MARK: - Публичный API
 
-    /// Поиск треков — запускает гонку по всем инстансам одновременно
+    /// Новый поиск — отменяет предыдущий, запускает гонку по всем инстансам
     func search(query: String) {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
@@ -51,13 +49,16 @@ class YouTubeService: ObservableObject {
         searchTask?.cancel()
         currentQuery = q
         currentPage = 1
-        canLoadMore = false
-        errorMessage = nil
 
-        DispatchQueue.main.async { self.isLoading = true }
+        DispatchQueue.main.async {
+            self.isLoading = true
+            self.errorMessage = nil
+            self.canLoadMore = false
+        }
 
-        searchTask = Task {
-            await performParallelSearch(query: q, page: 1, appending: false)
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.parallelSearch(query: q, page: 1, appending: false)
         }
     }
 
@@ -65,80 +66,83 @@ class YouTubeService: ObservableObject {
     func loadMore() {
         guard !isLoading, !currentQuery.isEmpty, canLoadMore else { return }
         let nextPage = currentPage + 1
+        let query = currentQuery
 
         DispatchQueue.main.async { self.isLoading = true }
 
         searchTask?.cancel()
-        searchTask = Task {
-            await performParallelSearch(query: currentQuery, page: nextPage, appending: true)
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.parallelSearch(query: query, page: nextPage, appending: true)
         }
     }
 
-    // MARK: - Параллельный поиск (race between instances)
+    // MARK: - Параллельный поиск
 
-    @MainActor
-    private func performParallelSearch(query: String, page: Int, appending: Bool) async {
+    private func parallelSearch(query: String, page: Int, appending: Bool) async {
+        guard !Task.isCancelled else { return }
+
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        var firstResult: [InvidiousSearchResult]? = nil
 
-        // Запросы к каждому инстансу конкурируют. Добавляем параметр music — фильтр тематики
-        let results = await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
+        await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
             for instance in apiInstances {
                 let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=\(page)"
                 guard let url = URL(string: urlStr) else { continue }
-
-                group.addTask { [weak self] in
-                    guard let self else { return nil }
-                    return await self.fetchSearchResults(from: url)
+                group.addTask { [weak self] () -> [InvidiousSearchResult]? in
+                    guard let self, !Task.isCancelled else { return nil }
+                    return await self.fetchResults(url: url)
                 }
             }
 
-            // Возвращаем первый непустой ответ
             for await result in group {
-                if let r = result, !r.isEmpty {
+                if let r = result, !r.isEmpty, firstResult == nil {
+                    firstResult = r
                     group.cancelAll()
-                    return r
+                    break
                 }
             }
-            return nil
         }
 
-        isLoading = false
+        guard !Task.isCancelled else { return }
 
-        guard let items = results, !items.isEmpty else {
-            if !appending {
-                errorMessage = "Ничего не найдено. Попробуйте другой запрос или проверьте интернет."
+        await MainActor.run {
+            self.isLoading = false
+
+            guard let items = firstResult, !items.isEmpty else {
+                if !appending {
+                    self.errorMessage = "Ничего не найдено. Попробуйте другой запрос или проверьте интернет."
+                }
+                self.canLoadMore = false
+                return
             }
-            canLoadMore = false
-            return
-        }
 
-        let newTracks = items.map { item in
-            YouTubeTrack(
-                id: item.videoId,
-                title: item.title,
-                uploader: item.author,
-                duration: item.lengthSeconds,
-                // Цепочка качества: maxres → hq → mq (loadable fallback в View)
-                thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
-            )
-        }
+            let newTracks = items.map { item in
+                YouTubeTrack(
+                    id: item.videoId,
+                    title: item.title,
+                    uploader: item.author,
+                    duration: item.lengthSeconds,
+                    thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
+                )
+            }
 
-        if appending {
-            tracks.append(contentsOf: newTracks)
-        } else {
-            tracks = newTracks
-        }
+            if appending {
+                self.tracks.append(contentsOf: newTracks)
+            } else {
+                self.tracks = newTracks
+            }
 
-        currentPage = page
-        // YouTube возвращает до 20 результатов на страницу
-        canLoadMore = newTracks.count >= 15
-        errorMessage = nil
+            self.currentPage = page
+            self.canLoadMore = newTracks.count >= 15
+            self.errorMessage = nil
+        }
     }
 
-    private func fetchSearchResults(from url: URL) async -> [InvidiousSearchResult]? {
+    private func fetchResults(url: URL) async -> [InvidiousSearchResult]? {
         do {
             var request = URLRequest(url: url)
-            request.timeoutInterval = 6 // Таймаут 6 секунд — быстро отсекаем медленные инстансы
+            request.timeoutInterval = 6
             request.setValue("CloudMusicPlayer/1.0", forHTTPHeaderField: "User-Agent")
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -147,7 +151,7 @@ class YouTubeService: ObservableObject {
                 return nil
             }
 
-            return try JSONDecoder().decode([InvidiousSearchResult].self, from: data)
+            return try? JSONDecoder().decode([InvidiousSearchResult].self, from: data)
         } catch {
             return nil
         }
@@ -156,21 +160,30 @@ class YouTubeService: ObservableObject {
     // MARK: - Поиск метаданных (для DownloadManager)
 
     func findMetadata(for query: String, completion: @escaping (YouTubeTrack?) -> Void) {
-        Task {
+        Task { [weak self] in
+            guard let self else { completion(nil); return }
             let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-            let results = await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
-                for instance in apiInstances {
+            var firstResult: [InvidiousSearchResult]? = nil
+
+            await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
+                for instance in self.apiInstances {
                     let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=1"
                     guard let url = URL(string: urlStr) else { continue }
-                    group.addTask { [weak self] in await self?.fetchSearchResults(from: url) }
+                    group.addTask { [weak self] () -> [InvidiousSearchResult]? in
+                        guard let self else { return nil }
+                        return await self.fetchResults(url: url)
+                    }
                 }
                 for await result in group {
-                    if let r = result, !r.isEmpty { group.cancelAll(); return r }
+                    if let r = result, !r.isEmpty, firstResult == nil {
+                        firstResult = r
+                        group.cancelAll()
+                        break
+                    }
                 }
-                return nil
             }
 
-            guard let first = results?.first else {
+            guard let first = firstResult?.first else {
                 completion(nil)
                 return
             }
@@ -186,28 +199,25 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    // MARK: - Извлечение аудиопотока через YouTubeKit
+    // MARK: - Аудиопоток через YouTubeKit
 
-    /// Получение прямой ссылки на аудиопоток по ID видео.
-    /// YouTubeKit — нативная Swift-библиотека, извлекает URL напрямую с серверов YouTube
-    /// без посредников. API ключи здесь НЕ нужны — всё работает через открытый YouTube API.
+    /// Извлечение прямой ссылки на аудиопоток по videoId.
+    /// YouTubeKit работает напрямую с серверами YouTube — API ключи не нужны.
     func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         Task {
             do {
-                let video = YouTube(videoID: videoId, methods: [.remote, .local])
+                let video = YouTube(videoID: videoId)
                 let streams = try await video.streams
 
-                // Приоритет 1: M4A (AAC) — лучшая совместимость с AVPlayer
+                // Приоритет 1: M4A (лучшая совместимость с AVPlayer)
                 let audioOnly = streams.filterAudioOnly()
-                let m4a = audioOnly.filter { $0.fileExtension == .m4a }
-                if let best = m4a.highestAudioBitrateStream() {
-                    completion(best.url); return
+                if let m4a = audioOnly.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() {
+                    completion(m4a.url); return
                 }
 
                 // Приоритет 2: MP4-аудио
-                let mp4audio = audioOnly.filter { $0.fileExtension == .mp4 }
-                if let best = mp4audio.highestAudioBitrateStream() {
-                    completion(best.url); return
+                if let mp4 = audioOnly.filter({ $0.fileExtension == .mp4 }).highestAudioBitrateStream() {
+                    completion(mp4.url); return
                 }
 
                 // Приоритет 3: Любой аудиопоток
@@ -229,11 +239,11 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    /// Получение видеопотока (для превью кадров)
+    /// Видеопоток (для превью-кадров)
     func getVideoURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         Task {
             do {
-                let video = YouTube(videoID: videoId, methods: [.remote, .local])
+                let video = YouTube(videoID: videoId)
                 let streams = try await video.streams
                 let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
                 completion(combined.first?.url)
@@ -244,7 +254,7 @@ class YouTubeService: ObservableObject {
     }
 }
 
-// MARK: - Модель ответа Invidious
+// MARK: - Модель ответа Invidious API
 
 struct InvidiousSearchResult: Codable {
     let videoId: String
