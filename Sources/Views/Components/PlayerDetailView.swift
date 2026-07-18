@@ -673,3 +673,230 @@ struct SystemVolumeSlider: UIViewRepresentable {
     
     func updateUIView(_ uiView: MPVolumeView, context: Context) {}
 }
+
+
+// MARK: - Вспомогательные классы и структуры визуализации
+
+class VisualizerEngine: ObservableObject {
+    @Published var heights: [CGFloat] = Array(repeating: 0.03, count: 28)
+    @Published var peaks: [CGFloat] = Array(repeating: 0.03, count: 28)
+    
+    private var peakDownSpeeds: [CGFloat] = Array(repeating: 0.0, count: 28)
+    private var timer: Timer?
+    private var time: CGFloat = 0.0
+    private let numberOfBars = 28
+    
+    init() {
+        startTimer()
+    }
+    
+    deinit {
+        stopTimer()
+    }
+    
+    func startTimer() {
+        timer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { [weak self] _ in
+            self?.update()
+        }
+    }
+    
+    func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    private func update() {
+        let isPlaying = AudioPlayerManager.shared.playbackState == .playing
+        
+        let allZero = heights.allSatisfy { $0 <= 0.035 } && peaks.allSatisfy { $0 <= 0.035 }
+        if !isPlaying && allZero { return }
+        
+        time += 0.15
+        
+        for i in 0..<numberOfBars {
+            var target: CGFloat = 0.03
+            
+            if isPlaying {
+                let x = time + CGFloat(i) * 0.35
+                if i < 6 {
+                    let beat = abs(sin(time * 2.8))
+                    let subBeat = abs(cos(time * 1.4)) * 0.3
+                    let noise = CGFloat.random(in: -0.15...0.25)
+                    let scale = CGFloat(6 - i) / 6.0
+                    target = max((beat * 0.65 + subBeat + noise) * scale, 0.15)
+                } else if i < 18 {
+                    let wave1 = sin(x * 2.2) * 0.3
+                    let wave2 = cos(x * 4.1) * 0.2
+                    target = abs(wave1 + wave2) + CGFloat.random(in: 0.0...0.3) + 0.1
+                } else {
+                    target = abs(sin(x * 6.5) * 0.15) + CGFloat.random(in: 0.0...0.4) + 0.05
+                }
+            }
+            
+            let speed: CGFloat = isPlaying ? 0.28 : 0.12
+            heights[i] = heights[i] + (target - heights[i]) * speed
+            
+            if heights[i] >= peaks[i] {
+                peaks[i] = heights[i]
+                peakDownSpeeds[i] = 0.0
+            } else {
+                peakDownSpeeds[i] += 0.0055
+                peaks[i] = max(peaks[i] - peakDownSpeeds[i], heights[i])
+            }
+            
+            heights[i] = min(max(heights[i], 0.03), 1.0)
+            peaks[i] = min(max(peaks[i], 0.03), 1.0)
+        }
+    }
+}
+
+struct RealtimeVisualizerView: View {
+    @ObservedObject var engine: VisualizerEngine
+    let maxHeight: CGFloat = 80.0
+    
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 3.0) {
+            ForEach(0..<engine.heights.count, id: \.self) { index in
+                let barH = maxHeight * engine.heights[index]
+                let peakH = maxHeight * engine.peaks[index]
+                
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.white.opacity(0.04))
+                        .frame(width: 5, height: maxHeight)
+                    
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(LinearGradient(
+                            colors: [.purple, .cyan],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        ))
+                        .frame(width: 5, height: max(barH, 2))
+                    
+                    RoundedRectangle(cornerRadius: 0.8)
+                        .fill(Color.white)
+                        .frame(width: 5, height: 1.5)
+                        .offset(y: -peakH)
+                }
+                .frame(height: maxHeight)
+            }
+        }
+    }
+}
+
+struct CircularVisualizerView: View {
+    @ObservedObject var engine: VisualizerEngine
+    var isPlaying: Bool
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .frame(width: 220, height: 220)
+            
+            ForEach(0..<36) { index in
+                let angle = Double(index) * 10.0
+                let heightIndex = index % engine.heights.count
+                let barHeight = isPlaying ? engine.heights[heightIndex] * 0.8 : 5.0
+                
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(LinearGradient(
+                        colors: [.purple, .cyan],
+                        startPoint: .bottom,
+                        endPoint: .top
+                    ))
+                    .frame(width: 3, height: barHeight)
+                    .offset(y: -110)
+                    .rotationEffect(.degrees(angle))
+            }
+        }
+        .frame(width: 250, height: 250)
+    }
+}
+
+struct TonearmView: View {
+    let isPlaying: Bool
+    
+    var body: some View {
+        ZStack {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [Color(white: 0.2), Color(white: 0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 44, height: 44)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 2)
+                
+                Circle()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1.5)
+                    .frame(width: 44, height: 44)
+                
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [Color(white: 0.8), Color(white: 0.5)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 22, height: 22)
+                
+                Circle()
+                    .fill(Color(white: 0.15))
+                    .frame(width: 6, height: 6)
+            }
+            
+            ZStack(alignment: .top) {
+                Path { path in
+                    path.move(to: CGPoint(x: 15, y: 15))
+                    path.addLine(to: CGPoint(x: 15, y: 80))
+                    path.addQuadCurve(to: CGPoint(x: -12, y: 145), control: CGPoint(x: 15, y: 120))
+                }
+                .stroke(
+                    LinearGradient(
+                        colors: [Color(white: 0.65), Color(white: 0.95), Color(white: 0.65)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                )
+                .frame(width: 30, height: 160)
+                
+                ZStack {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.orange)
+                        .frame(width: 10, height: 20)
+                        .shadow(radius: 1)
+                    
+                    Rectangle()
+                        .fill(LinearGradient(
+                            colors: [Color(white: 0.8), Color(white: 0.5)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                        .frame(width: 12, height: 5)
+                        .offset(y: -8)
+                    
+                    Rectangle()
+                        .fill(Color.white)
+                        .frame(width: 5, height: 1.2)
+                        .offset(x: 7, y: 1)
+                }
+                .rotationEffect(.degrees(-32))
+                .offset(x: -28, y: 130)
+            }
+            .frame(width: 30, height: 160)
+            .offset(y: 80)
+            .rotationEffect(.degrees(isPlaying ? 25 : -5), anchor: .top)
+            .animation(.spring(response: 1.0, dampingFraction: 0.75, blendDuration: 0), value: isPlaying)
+        }
+    }
+}
+
+private struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.90 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}

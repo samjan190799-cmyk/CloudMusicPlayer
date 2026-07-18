@@ -138,11 +138,8 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Системный размыватель для Glassmorphism
-
 struct VisualEffectBlur: UIViewRepresentable {
     var material: UIBlurEffect.Style
-    var blendingMode: UIVisualEffectView.BlendingMode = .withinWindow
     
     func makeUIView(context: Context) -> UIVisualEffectView {
         let view = UIVisualEffectView(effect: UIBlurEffect(style: material))
