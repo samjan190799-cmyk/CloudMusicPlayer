@@ -1,4 +1,5 @@
 import Foundation
+import YouTubeKit
 
 /// Модель трека с YouTube
 struct YouTubeTrack: Identifiable, Codable {

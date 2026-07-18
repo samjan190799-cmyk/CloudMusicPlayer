@@ -441,7 +441,7 @@ struct YouTubeView: View {
                 .foregroundColor(.cyan)
                 .font(.system(size: 20))
                 .padding(6)
-        case .failed:
+        case .failed(_):
             Button(action: { downloadManager.downloadYouTubeTrack(track) }) {
                 Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
                     .foregroundColor(.red)
