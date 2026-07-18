@@ -122,15 +122,16 @@ struct PlayerDetailView: View {
                 }
             }) {
                 ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterial)
                     Circle()
                         .fill(Color.white.opacity(0.06))
-                        .frame(width: 40, height: 40)
-                        .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(Circle()))
                     
                     Image(systemName: "chevron.down")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.white)
                 }
+                .clipShape(Circle())
+                .frame(width: 40, height: 40)
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -152,15 +153,16 @@ struct PlayerDetailView: View {
                 cycleInterfaceMode()
             }) {
                 ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterial)
                     Circle()
                         .fill(Color.white.opacity(0.06))
-                        .frame(width: 40, height: 40)
-                        .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(Circle()))
                     
                     Image(systemName: playerInterfaceMode == "vinyl" ? "record.circle" : (playerInterfaceMode == "cover" ? "photo.fill" : "waveform.path"))
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                 }
+                .clipShape(Circle())
+                .frame(width: 40, height: 40)
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -419,16 +421,17 @@ struct PlayerDetailView: View {
                 playlistManager.toggleFavorite(track: playlistTrack)
             }) {
                 ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterial)
                     Circle()
                         .fill(Color.white.opacity(0.06))
-                        .frame(width: 44, height: 44)
-                        .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(Circle()))
                     
                     Image(systemName: playlistManager.isTrackFavorite(trackId: track.id) ? "heart.fill" : "heart")
                         .font(.system(size: 20))
                         .foregroundColor(playlistManager.isTrackFavorite(trackId: track.id) ? .pink : .white)
                         .shadow(color: playlistManager.isTrackFavorite(trackId: track.id) ? .pink.opacity(0.4) : .clear, radius: 4)
                 }
+                .clipShape(Circle())
+                .frame(width: 44, height: 44)
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -569,15 +572,16 @@ struct PlayerDetailView: View {
     
     private func controlButtonBackground(icon: String, size: CGFloat = 46, iconSize: CGFloat = 14, isSelected: Bool = false) -> some View {
         ZStack {
+            VisualEffectBlur(material: .systemUltraThinMaterial)
             Circle()
                 .fill(isSelected ? Color.cyan.opacity(0.12) : Color.white.opacity(0.06))
-                .frame(width: size, height: size)
-                .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(Circle()))
             
             Image(systemName: icon)
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundColor(isSelected ? .cyan : .white)
         }
+        .clipShape(Circle())
+        .frame(width: size, height: size)
         .overlay(
             Circle()
                 .stroke(isSelected ? Color.cyan.opacity(0.25) : Color.white.opacity(0.12), lineWidth: 1)

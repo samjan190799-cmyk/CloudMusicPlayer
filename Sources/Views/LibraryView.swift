@@ -111,15 +111,16 @@ struct LibraryView: View {
                     showingCreatePlaylistAlert = true
                 }) {
                     ZStack {
+                        VisualEffectBlur(material: .systemUltraThinMaterial)
                         Circle()
                             .fill(Color.white.opacity(0.06))
-                            .frame(width: 42, height: 42)
-                            .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(Circle()))
                         
                         Image(systemName: "plus")
                             .foregroundColor(.white)
                             .font(.system(size: 18, weight: .bold))
                     }
+                    .clipShape(Circle())
+                    .frame(width: 42, height: 42)
                     .overlay(
                         Circle()
                             .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -129,15 +130,16 @@ struct LibraryView: View {
             } else {
                 // Плейсхолдер профиля в стеклянном стиле как на дизайне
                 ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterial)
                     Circle()
                         .fill(Color.white.opacity(0.06))
-                        .frame(width: 42, height: 42)
-                        .background(VisualEffectBlur(material: .systemUltraThinMaterial).clipShape(Circle()))
                     
                     Image(systemName: "person.fill")
                         .foregroundColor(.white.opacity(0.8))
                         .font(.system(size: 16))
                 }
+                .clipShape(Circle())
+                .frame(width: 42, height: 42)
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
