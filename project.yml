@@ -13,7 +13,9 @@ targets:
     sources:
       - path: Sources
         excludes:
-          - Widget
+          - Widget/PlayerWidget.swift
+          - Widget/PlayerWidgetIntents.swift
+          - Widget/Info.plist
     dependencies:
       - package: YouTubeKit
       - target: CloudMusicPlayerWidget
