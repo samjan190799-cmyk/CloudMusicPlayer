@@ -2,6 +2,8 @@ import Foundation
 import AVFoundation
 import MediaPlayer
 import Combine
+import WidgetKit
+import UIKit
 
 /// Состояние воспроизведения
 enum PlaybackState {
@@ -71,6 +73,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
         super.init()
         setupAudioSession()
         setupRemoteCommandCenter()
+        setupWidgetSupport()
     }
     
     deinit {
@@ -149,6 +152,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
             playbackState = .playing
             updateNowPlayingPlaybackState()
         }
+        updateSharedPlayerState()
     }
     
     /// Следующий трек
@@ -412,6 +416,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     self?.updateNowPlayingInfo(for: track)
                     self?.playbackState = .playing
                     self?.player?.play()
+                    self?.updateSharedPlayerState()
                 } else if status == .failed {
                     self?.playbackState = .stopped
                     print("Ошибка воспроизведения элемента: \(String(describing: item.error))")
@@ -576,7 +581,81 @@ class AudioPlayerManager: NSObject, ObservableObject {
             return .success
         }
     }
+    
+    // MARK: - Widget Support
+    
+    /// Регистрирует Darwin-уведомление для получения команд от Widget Extension.
+    /// Darwin notifications — единственный кросс-процессный механизм, работающий
+    /// когда основное приложение находится в фоне с активной аудио-сессией.
+    private func setupWidgetSupport() {
+        let name = kDarwinCommandName as CFString
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            { _, observer, _, _, _ in
+                guard let ptr = observer else { return }
+                let manager = Unmanaged<AudioPlayerManager>.fromOpaque(ptr).takeUnretainedValue()
+                manager.handleWidgetCommand()
+            },
+            name,
+            nil,
+            .deliverImmediately
+        )
+        // Обновить виджет с текущим состоянием при старте
+        updateSharedPlayerState()
+    }
+    
+    /// Читает команду из shared UserDefaults и выполняет её.
+    private func handleWidgetCommand() {
+        let defaults = UserDefaults(suiteName: kAppGroupID)
+        guard let command = defaults?.string(forKey: "pendingWidgetCommand") else { return }
+        defaults?.removeObject(forKey: "pendingWidgetCommand")
+        defaults?.synchronize()
+        
+        DispatchQueue.main.async { [weak self] in
+            switch command {
+            case "togglePlayPause":
+                self?.togglePlayPause()
+            case "skipNext":
+                self?.nextTrack()
+            case "skipPrevious":
+                self?.previousTrack()
+            default:
+                break
+            }
+        }
+    }
+    
+    /// Записывает текущее состояние плеера в shared UserDefaults и перезагружает таймлайны виджета.
+    func updateSharedPlayerState() {
+        let track = currentTrack
+        let isPlaying = playbackState == .playing
+        
+        // Подготовка обложки (max 200×200 px для экономии места в UserDefaults)
+        var coverData: Data? = nil
+        if let coverURL = track?.localCoverURL,
+           let image = UIImage(contentsOfFile: coverURL.path) {
+            let targetSize = CGSize(width: 200, height: 200)
+            let renderer = UIGraphicsImageRenderer(size: targetSize)
+            let resized = renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: targetSize))
+            }
+            coverData = resized.pngData()
+        }
+        
+        let state = SharedPlayerState(
+            trackTitle: track?.title ?? "CloudMusicPlayer",
+            artistName: track?.artist ?? "Нет трека",
+            isPlaying: isPlaying,
+            coverData: coverData
+        )
+        state.save()
+        
+        // Перезагрузить таймлайны виджета
+        WidgetCenter.shared.reloadAllTimelines()
+    }
 }
+
 
 // MARK: - Конвертация в формат трека плейлиста
 extension PlayerTrack {

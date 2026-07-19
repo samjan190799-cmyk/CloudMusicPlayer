@@ -12,8 +12,13 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: Sources
+        excludes:
+          - Widget
     dependencies:
       - package: YouTubeKit
+      - target: CloudMusicPlayerWidget
+        embed: true
+        link: false
     info:
       path: Sources/Info.plist
       properties:
@@ -42,3 +47,32 @@ targets:
         CODE_SIGNING_ALLOWED: "NO"
         GENERATE_INFOPLIST_FILE: "NO"
 
+  CloudMusicPlayerWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources/Widget
+    info:
+      path: Sources/Widget/Info.plist
+      properties:
+        CFBundleName: CloudMusicPlayerWidget
+        CFBundleDisplayName: Player Widget
+        CFBundleIdentifier: com.samvel.cloudmusicplayer.widget
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0"
+        CFBundlePackageType: "XPC!"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.widget
+        PRODUCT_NAME: CloudMusicPlayerWidget
+        SKIP_INSTALL: "YES"
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        GENERATE_INFOPLIST_FILE: "NO"
