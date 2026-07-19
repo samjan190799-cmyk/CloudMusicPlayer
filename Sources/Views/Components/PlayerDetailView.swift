@@ -130,8 +130,8 @@ struct PlayerDetailView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.white)
                 }
-                .clipShape(Circle())
                 .frame(width: 40, height: 40)
+                .clipShape(Circle())
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -161,8 +161,8 @@ struct PlayerDetailView: View {
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                 }
-                .clipShape(Circle())
                 .frame(width: 40, height: 40)
+                .clipShape(Circle())
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -430,8 +430,8 @@ struct PlayerDetailView: View {
                         .foregroundColor(playlistManager.isTrackFavorite(trackId: track.id) ? .pink : .white)
                         .shadow(color: playlistManager.isTrackFavorite(trackId: track.id) ? .pink.opacity(0.4) : .clear, radius: 4)
                 }
-                .clipShape(Circle())
                 .frame(width: 44, height: 44)
+                .clipShape(Circle())
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -580,8 +580,8 @@ struct PlayerDetailView: View {
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundColor(isSelected ? .cyan : .white)
         }
-        .clipShape(Circle())
         .frame(width: size, height: size)
+        .clipShape(Circle())
         .overlay(
             Circle()
                 .stroke(isSelected ? Color.cyan.opacity(0.25) : Color.white.opacity(0.12), lineWidth: 1)

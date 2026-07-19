@@ -119,8 +119,8 @@ struct LibraryView: View {
                             .foregroundColor(.white)
                             .font(.system(size: 18, weight: .bold))
                     }
-                    .clipShape(Circle())
                     .frame(width: 42, height: 42)
+                    .clipShape(Circle())
                     .overlay(
                         Circle()
                             .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -138,8 +138,8 @@ struct LibraryView: View {
                         .foregroundColor(.white.opacity(0.8))
                         .font(.system(size: 16))
                 }
-                .clipShape(Circle())
                 .frame(width: 42, height: 42)
+                .clipShape(Circle())
                 .overlay(
                     Circle()
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
