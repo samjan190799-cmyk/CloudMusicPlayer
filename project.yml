@@ -35,6 +35,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         CFBundleIconName: AppIcon
+        UIBackgroundModes:
+          - audio
     settings:
       base:
         SWIFT_VERSION: "5.9"
