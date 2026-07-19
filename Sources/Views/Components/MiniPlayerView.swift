@@ -125,7 +125,7 @@ struct MiniPlayerView: View {
                             .stroke(Color.white.opacity(0.15), lineWidth: 1)
                     )
             )
-            )
+
             .shadow(color: Color.purple.opacity(0.12), radius: 10, x: 0, y: 4)
             .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 4)
             .onTapGesture {
