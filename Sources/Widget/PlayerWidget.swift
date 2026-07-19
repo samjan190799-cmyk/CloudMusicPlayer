@@ -314,7 +314,8 @@ struct PlayerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PlayerProvider()) { entry in
             PlayerWidgetEntryView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                // containerBackground требует iOS 17+; на iOS 16 виджет рисует фон сам
+                .widgetBackground()
         }
         .configurationDisplayName("CloudMusicPlayer")
         .description("Управляй музыкой прямо с рабочего стола")
@@ -327,6 +328,21 @@ struct PlayerWidget: Widget {
     }
 }
 
+
+// MARK: - Compatibility Helper
+
+extension View {
+    /// Применяет containerBackground на iOS 17+, ничего не делает на iOS 16.
+    @ViewBuilder
+    func widgetBackground() -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            self.containerBackground(.fill.tertiary, for: .widget)
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - Widget Bundle Entry Point
 
 @main
@@ -335,3 +351,4 @@ struct PlayerWidgetBundle: WidgetBundle {
         PlayerWidget()
     }
 }
+
