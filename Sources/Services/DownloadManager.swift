@@ -548,3 +548,20 @@ extension UIImage {
         return UIGraphicsGetImageFromCurrentImageContext()
     }
 }
+
+// MARK: - Конвертация LocalTrack -> PlaylistTrack
+extension LocalTrack {
+    func toPlaylistTrack() -> PlaylistTrack {
+        PlaylistTrack(
+            id: id,
+            title: title,
+            artist: artist ?? source.displayName,
+            sourceName: source.displayName,
+            localRelativePath: relativePath,
+            remoteURLString: nil,
+            googleFileId: nil,
+            localCoverPath: localCoverPath,
+            duration: duration
+        )
+    }
+}
