@@ -83,9 +83,11 @@ class YouTubeService: ObservableObject {
         guard !Task.isCancelled else { return }
 
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        var firstResult: [InvidiousSearchResult]? = nil
 
-        await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
+        // Swift 6: используем nonisolated let после withTaskGroup вместо захвата var
+        let foundResult: [InvidiousSearchResult]? = await withTaskGroup(
+            of: [InvidiousSearchResult]?.self
+        ) { group -> [InvidiousSearchResult]? in
             for instance in apiInstances {
                 let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=\(page)"
                 guard let url = URL(string: urlStr) else { continue }
@@ -96,12 +98,12 @@ class YouTubeService: ObservableObject {
             }
 
             for await result in group {
-                if let r = result, !r.isEmpty, firstResult == nil {
-                    firstResult = r
+                if let r = result, !r.isEmpty {
                     group.cancelAll()
-                    break
+                    return r
                 }
             }
+            return nil
         }
 
         guard !Task.isCancelled else { return }
@@ -109,7 +111,7 @@ class YouTubeService: ObservableObject {
         await MainActor.run {
             self.isLoading = false
 
-            guard let items = firstResult, !items.isEmpty else {
+            guard let items = foundResult, !items.isEmpty else {
                 if !appending {
                     self.errorMessage = "Ничего не найдено. Попробуйте другой запрос или проверьте интернет."
                 }

@@ -410,65 +410,72 @@ struct LibraryView: View {
     }
     
     // MARK: - Ряд офлайн трека (Row)
-    
+
+    @ViewBuilder
+    private func trackCoverButton(for localTrack: LocalTrack, isPlayingThis: Bool) -> some View {
+        Button(action: {
+            playLocalTrack(localTrack)
+        }) {
+            ZStack {
+                if let coverURL = localTrack.localCoverURL,
+                   let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(placeholderGradient(for: localTrack.title))
+                        .frame(width: 48, height: 48)
+                        .opacity(0.8)
+                }
+                let isPlaying = isPlayingThis && playerManager.playbackState == .playing
+                Circle()
+                    .fill(Color.black.opacity(0.4))
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .foregroundColor(.white)
+                            .font(.system(size: 10, weight: .bold))
+                            .offset(x: isPlaying ? 0 : 0.5)
+                    )
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    @ViewBuilder
+    private func trackInfoSection(for localTrack: LocalTrack, isPlayingThis: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(localTrack.title)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(isPlayingThis ? .cyan : .white)
+                .lineLimit(1)
+
+            HStack(spacing: 8) {
+                Text(localTrack.artist ?? localTrack.source.displayName)
+                    .font(.system(size: 12))
+                    .foregroundColor(.purple.opacity(0.8))
+                    .lineLimit(1)
+
+                Text(formatSize(localTrack.size))
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+
     private func trackRow(for localTrack: LocalTrack) -> some View {
         let isPlayingThis = playerManager.currentTrack?.id == localTrack.id
-        
+
         return HStack(spacing: 12) {
-            // Кнопка Play прямо поверх обложки трека (как на дизайне)
-            Button(action: {
-                playLocalTrack(localTrack)
-            }) {
-                ZStack {
-                    if let coverURL = localTrack.localCoverURL,
-                       let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(placeholderGradient(for: localTrack.title))
-                            .frame(width: 48, height: 48)
-                            .opacity(0.8)
-                    }
-                    
-                    // Кнопка воспроизведения поверх обложки
-                    Circle()
-                        .fill(Color.black.opacity(0.4))
-                        .frame(width: 24, height: 24)
-                        .overlay(
-                            Image(systemName: isPlayingThis && playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                                .foregroundColor(.white)
-                                .font(.system(size: 10, weight: .bold))
-                                .offset(x: isPlayingThis && playerManager.playbackState == .playing ? 0 : 0.5)
-                        )
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Инфо
-            VStack(alignment: .leading, spacing: 4) {
-                Text(localTrack.title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(isPlayingThis ? .cyan : .white)
-                    .lineLimit(1)
-                
-                HStack(spacing: 8) {
-                    Text(localTrack.artist ?? localTrack.source.displayName)
-                        .font(.system(size: 12))
-                        .foregroundColor(.purple.opacity(0.8))
-                        .lineLimit(1)
-                    
-                    Text(formatSize(localTrack.size))
-                        .font(.system(size: 11))
-                        .foregroundColor(.gray)
-                }
-            }
-            
+            trackCoverButton(for: localTrack, isPlayingThis: isPlayingThis)
+
+            trackInfoSection(for: localTrack, isPlayingThis: isPlayingThis)
+
             Spacer()
-            
+
             // Кнопка контекстного меню
             Menu {
                 Button(action: {
@@ -476,7 +483,7 @@ struct LibraryView: View {
                 }) {
                     Label("Добавить в плейлист", systemImage: "music.note.list")
                 }
-                
+
                 Button(role: .destructive, action: {
                     HapticManager.shared.triggerImpact(style: .medium)
                     deleteTrack(localTrack)
@@ -489,7 +496,7 @@ struct LibraryView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 10)
             }
-            
+
             // Зелёная галочка офлайн скачивания
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.cyan)
