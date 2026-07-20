@@ -6,6 +6,8 @@ struct CloudMusicPlayerApp: App {
     
     init() {
         setupBackgroundAudio()
+        URLProtocol.registerClass(YouTubeURLProtocol.self)
+        _ = YouTubeSessionManager.shared
     }
     
     var body: some Scene {

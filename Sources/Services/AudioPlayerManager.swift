@@ -66,8 +66,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private var player: AVPlayer?
     private var timeObserverToken: Any?
     private var playerItemContext = 0
-    
     private var cancellables = Set<AnyCancellable>()
+    private var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
     
     override init() {
         super.init()
@@ -78,7 +78,42 @@ class AudioPlayerManager: NSObject, ObservableObject {
     
     deinit {
         removeTimeObserver()
+        endBackgroundTask()
         NotificationCenter.default.removeObserver(self)
+    }
+    
+    private func startBackgroundTask() {
+        if Thread.isMainThread {
+            self.executeStartBackgroundTask()
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.executeStartBackgroundTask()
+            }
+        }
+    }
+    
+    private func executeStartBackgroundTask() {
+        endBackgroundTask()
+        backgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "AudioPlaybackTransfer") { [weak self] in
+            self?.endBackgroundTask()
+        }
+        print("AudioPlayerManager: Запущен фоновый таск \(backgroundTaskIdentifier)")
+    }
+    
+    private func endBackgroundTask() {
+        let taskId = backgroundTaskIdentifier
+        guard taskId != .invalid else { return }
+        backgroundTaskIdentifier = .invalid
+        
+        if Thread.isMainThread {
+            UIApplication.shared.endBackgroundTask(taskId)
+            print("AudioPlayerManager: Завершается фоновый таск \(taskId)")
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.endBackgroundTask(taskId)
+                print("AudioPlayerManager: Завершается фоновый таск \(taskId) (из фона)")
+            }
+        }
     }
     
     /// Настройка фонового аудио-сеанса
@@ -250,6 +285,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
     }
     
     private func loadAndPlay(track: PlayerTrack) {
+        startBackgroundTask()
         playbackState = .loading
         currentTime = 0.0
         duration = track.duration ?? 0.0
@@ -298,14 +334,13 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 guard let downloadUrl = downloadUrl else {
                     DispatchQueue.main.async {
                         self?.playbackState = .stopped
+                        self?.endBackgroundTask()
                     }
                     return
                 }
                 DispatchQueue.main.async {
                     let item = AVPlayerItem(url: downloadUrl)
                     self?.setupPlayer(with: item, track: track)
-                    
-                    // Запуск автоматического кэширования в фоне
                     self?.triggerCaching(for: track)
                 }
             }
@@ -315,13 +350,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
         else if track.sourceName.contains("YouTube") {
             print("AudioPlayer: запрос аудио URL для YouTube трека: \(track.id) — \(track.title)")
             
-            // Background task гарантирует что система не убьёт приложение пока мы
-            // асинхронно запрашиваем URL у YouTube — особенно важно при фоновом режиме
-            let bgTask = UIApplication.shared.beginBackgroundTask(withName: "YouTubeURLFetch") { }
-            
             YouTubeService.shared.getAudioURL(for: track.id) { [weak self] audioUrl in
-                defer { UIApplication.shared.endBackgroundTask(bgTask) }
-                
                 guard let self = self else { return }
                 
                 if let audioUrl = audioUrl {
@@ -331,21 +360,15 @@ class AudioPlayerManager: NSObject, ObservableObject {
                         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
                         "Referer": "https://www.youtube.com/"
                     ]
-                    // preferPreciseDurationAndTiming = false — AVPlayer начинает буферизацию
-                    // немедленно, не дожидаясь полной информации о длительности.
-                    // Критично для фонового воспроизведения YouTube-стримов.
                     let assetOptions: [String: Any] = [
                         "AVURLAssetHTTPHeaderFieldsKey": headers,
                         "AVURLAssetPreferPreciseDurationAndTimingKey": false
                     ]
                     let asset = AVURLAsset(url: audioUrl, options: assetOptions)
                     let item = AVPlayerItem(asset: asset)
-                    // Буферизировать вперёд 60 секунд для стабильного фонового воспроизведения
                     item.preferredForwardBufferDuration = 60
                     
                     DispatchQueue.main.async {
-                        // Переактивируем аудио-сессию — она могла деактивироваться
-                        // пока шёл асинхронный запрос URL в фоне
                         try? AVAudioSession.sharedInstance().setActive(true)
                         self.setupPlayer(with: item, track: track)
                         self.triggerCaching(for: track)
@@ -354,18 +377,17 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     print("AudioPlayer: ОШИБКА — не удалось получить аудио URL для YouTube трека \(track.id)")
                     DispatchQueue.main.async {
                         self.playbackState = .stopped
+                        self.endBackgroundTask()
                     }
                 }
             }
             return
         }
-
-        
         guard let item = playerItem else {
             playbackState = .stopped
+            endBackgroundTask()
             return
         }
-        
         setupPlayer(with: item, track: track)
     }
     
@@ -441,13 +463,14 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     self?.playbackState = .playing
                     self?.player?.play()
                     self?.updateSharedPlayerState()
+                    self?.endBackgroundTask()
                 } else if status == .failed {
                     self?.playbackState = .stopped
+                    self?.endBackgroundTask()
                     print("Ошибка воспроизведения элемента: \(String(describing: item.error))")
                 }
             }
             .store(in: &cancellables)
-        
         // Обсервация текущего времени проигрывания
         removeTimeObserver()
         let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)

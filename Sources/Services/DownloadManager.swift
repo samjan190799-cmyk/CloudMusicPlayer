@@ -86,7 +86,7 @@ class DownloadManager: NSObject, ObservableObject {
         for (trackId, progress) in activeDownloads {
             if let task = downloadTasks[trackId],
                let taskDescription = task.taskDescription {
-                let components = taskDescription.split(separator: "|", omittingEmptySubsequences: false)
+                let components = taskDescription.components(separatedBy: ":::")
                 if components.count >= 3 {
                     let title = String(components[1])
                     let sourceRaw = String(components[2])
@@ -99,7 +99,6 @@ class DownloadManager: NSObject, ObservableObject {
         }
         return list.sorted { $0.title < $1.title }
     }
-    
     /// Отмена активной загрузки по ID трека
     func cancelDownload(trackId: String) {
         if let task = downloadTasks[trackId] {
@@ -167,16 +166,23 @@ class DownloadManager: NSObject, ObservableObject {
     /// Загрузка базы данных библиотеки
     func loadLibrary() {
         guard FileManager.default.fileExists(atPath: libraryURL.path) else {
-            self.localTracks = []
+            DispatchQueue.main.async {
+                self.localTracks = []
+            }
             return
         }
         
         do {
             let data = try Data(contentsOf: libraryURL)
-            self.localTracks = try JSONDecoder().decode([LocalTrack].self, from: data)
+            let tracks = try JSONDecoder().decode([LocalTrack].self, from: data)
+            DispatchQueue.main.async {
+                self.localTracks = tracks
+            }
         } catch {
             print("Ошибка загрузки медиатеки: \(error)")
-            self.localTracks = []
+            DispatchQueue.main.async {
+                self.localTracks = []
+            }
         }
     }
     
@@ -285,7 +291,7 @@ class DownloadManager: NSObject, ObservableObject {
         let thumbnailStr = thumbnailUrl ?? ""
         
         // Добавляем метаданные в описание задачи
-        task.taskDescription = "\(trackId)|\(title)|\(source.rawValue)|\(size)|\(artistStr)|\(durationStr)|\(thumbnailStr)"
+        task.taskDescription = "\(trackId):::\(title):::\(source.rawValue):::\(size):::\(artistStr):::\(durationStr):::\(thumbnailStr)"
         downloadTasks[trackId] = task
         task.resume()
     }
@@ -307,12 +313,11 @@ class DownloadManager: NSObject, ObservableObject {
 
 // Реализация URLSessionDelegate для отслеживания прогресса и завершения загрузки
 extension DownloadManager: URLSessionDownloadDelegate {
-    
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let taskDescription = downloadTask.taskDescription else { return }
-        let components = taskDescription.split(separator: "|")
-        guard components.count >= 1 else { return }
-        let trackId = String(components[0])
+        let components = taskDescription.components(separatedBy: ":::")
+        guard components.count >= 4 else { return }
+        let trackId = components[0]
         
         let expectedBytes = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : (Int64(components[3]) ?? 1)
         let progress = Double(totalBytesWritten) / Double(expectedBytes)
@@ -324,7 +329,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let taskDescription = downloadTask.taskDescription else { return }
-        let components = taskDescription.components(separatedBy: "|")
+        let components = taskDescription.components(separatedBy: ":::")
         guard components.count >= 4 else { return }
         
         let trackId = String(components[0])
@@ -457,15 +462,15 @@ extension DownloadManager: URLSessionDownloadDelegate {
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
-            print("Ошибка загрузки: \(error.localizedDescription)")
-            guard let taskDescription = task.taskDescription else { return }
-            let components = taskDescription.split(separator: "|")
-            guard components.count >= 1 else { return }
-            let trackId = String(components[0])
-            
-            DispatchQueue.main.async {
-                self.activeDownloads.removeValue(forKey: trackId)
-                self.downloadTasks.removeValue(forKey: trackId)
+             print("Ошибка загрузки: \(error.localizedDescription)")
+             guard let taskDescription = task.taskDescription else { return }
+             let components = taskDescription.components(separatedBy: ":::")
+             guard components.count >= 1 else { return }
+             let trackId = components[0]
+             
+             DispatchQueue.main.async {
+                 self.activeDownloads.removeValue(forKey: trackId)
+                 self.downloadTasks.removeValue(forKey: trackId)
             }
         }
     }
