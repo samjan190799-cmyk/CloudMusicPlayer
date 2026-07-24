@@ -160,18 +160,7 @@ struct LibraryView: View {
             sectionPickerButton(title: "Избранное", index: 2)
         }
         .padding(4)
-        .background(
-            ZStack {
-                VisualEffectBlur(material: .systemUltraThinMaterial)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.05))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
+        .liquidGlass(cornerRadius: 18, opacity: 0.5)
         .padding(.horizontal, 20)
         .padding(.bottom, 16)
     }
@@ -180,34 +169,31 @@ struct LibraryView: View {
         let isSelected = selectedSection == index
         
         return Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
                 selectedSection = index
                 HapticManager.shared.triggerSelection()
             }
         }) {
             Text(title)
                 .font(.system(size: 14, weight: isSelected ? .bold : .semibold))
-                .foregroundColor(isSelected ? .white : .gray)
+                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, 9)
                 .background(
                     Group {
                         if isSelected {
-                            LinearGradient(
-                                colors: [Color.purple.opacity(0.7), Color.blue.opacity(0.4)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .shadow(color: Color.purple.opacity(0.3), radius: 4, x: 0, y: 2)
+                            AppTheme.primaryGradient
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .neonGlow(color: AppTheme.neonCyan, radius: 8, opacity: 0.4)
                         } else {
                             Color.clear
                         }
                     }
                 )
         }
-        .buttonStyle(ScaleButtonStyle())
+        .buttonStyle(SpringScaleButtonStyle())
     }
+
     
     // MARK: - Секция треков (Раздел 0)
     

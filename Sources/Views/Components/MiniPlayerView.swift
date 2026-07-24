@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Вспомогательное представление мини-плеера внизу экрана
+/// Вспомогательное представление мини-плеера в стиле Liquid Glass 2026
 struct MiniPlayerView: View {
     @ObservedObject var playerManager = AudioPlayerManager.shared
     @Binding var isPlayerExpanded: Bool
@@ -13,123 +13,104 @@ struct MiniPlayerView: View {
         return AnyView(
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    // Иконка/обложка
-                    ZStack(alignment: .bottomTrailing) {
+                    // Обложка трека с неоновым свечением
+                    ZStack(alignment: .center) {
                         if let coverURL = track.localCoverURL,
                            let uiImage = UIImage(contentsOfFile: coverURL.path) {
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 48, height: 48)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            
-                            // Полупрозрачный оверлей с микро-визуализатором в правом нижнем углу
-                            if playerManager.playbackState == .playing {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(Color.black.opacity(0.6))
-                                        .frame(width: 20, height: 18)
-                                    
-                                    MiniVisualizerView(isPlaying: true)
-                                }
-                                .padding(2)
-                                .transition(.opacity)
-                            }
+                                .frame(width: 44, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .shadow(color: AppTheme.neonCyan.opacity(0.2), radius: 6, x: 0, y: 3)
                         } else {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(LinearGradient(
-                                    colors: [.purple, .blue],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                                .frame(width: 48, height: 48)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(AppTheme.primaryGradient)
+                                .frame(width: 44, height: 44)
+                                .shadow(color: AppTheme.neonPurple.opacity(0.3), radius: 6, x: 0, y: 3)
                             
-                            if playerManager.playbackState == .playing {
-                                MiniVisualizerView(isPlaying: true, tintColor: .white)
-                            } else {
-                                Image(systemName: "music.note")
-                                    .foregroundColor(.white)
-                                    .font(.title3)
+                            Image(systemName: "music.note")
+                                .foregroundColor(.white)
+                                .font(.system(size: 18, weight: .bold))
+                        }
+                        
+                        if playerManager.playbackState == .playing {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.black.opacity(0.65))
+                                    .frame(width: 24, height: 22)
+                                
+                                MiniVisualizerView(isPlaying: true, tintColor: AppTheme.neonCyan)
                             }
                         }
                     }
                     
                     // Название трека и источник
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(track.title)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(AppTheme.textPrimary)
                             .lineLimit(1)
                         
                         Text(track.sourceName)
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                            .lineLimit(1)
                     }
                     
                     Spacer()
                     
                     // Кнопки управления
-                    HStack(spacing: 16) {
+                    HStack(spacing: 14) {
                         Button(action: {
                             HapticManager.shared.triggerImpact(style: .medium)
                             playerManager.togglePlayPause()
                         }) {
-                            Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                                .font(.title3)
-                                .foregroundColor(.white)
+                            ZStack {
+                                Circle()
+                                    .fill(AppTheme.neonCyan.opacity(0.15))
+                                    .frame(width: 36, height: 36)
+                                
+                                Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(AppTheme.neonCyan)
+                            }
                         }
-                        .frame(width: 32, height: 32)
-                        .buttonStyle(ScaleButtonStyle())
+                        .buttonStyle(GlowingIconButtonStyle(glowColor: AppTheme.neonCyan))
                         
                         Button(action: {
                             HapticManager.shared.triggerImpact(style: .light)
                             playerManager.nextTrack()
                         }) {
                             Image(systemName: "forward.fill")
-                                .font(.title3)
-                                .foregroundColor(.white)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(AppTheme.textSecondary)
                         }
-                        .frame(width: 32, height: 32)
-                        .buttonStyle(ScaleButtonStyle())
+                        .buttonStyle(SpringScaleButtonStyle())
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 
-                // Тонкий индикатор прогресса трека
+                // Тонкий индикатор прогресса воспроизведения
                 GeometryReader { geo in
                     let percent = playerManager.duration > 0 ? CGFloat(playerManager.currentTime / playerManager.duration) : 0.0
                     ZStack(alignment: .leading) {
                         Rectangle()
                             .fill(Color.white.opacity(0.08))
-                            .frame(height: 2)
+                            .frame(height: 2.5)
                         
                         Rectangle()
-                            .fill(LinearGradient(
-                                colors: [.cyan, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                            .frame(width: geo.size.width * min(max(percent, 0.0), 1.0), height: 2)
+                            .fill(AppTheme.primaryGradient)
+                            .frame(width: geo.size.width * min(max(percent, 0.0), 1.0), height: 2.5)
+                            .neonGlow(color: AppTheme.neonCyan, radius: 4, opacity: 0.6)
                     }
                 }
-                .frame(height: 2)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 2)
+                .frame(height: 2.5)
             }
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                    )
-            )
-
-            .shadow(color: Color.purple.opacity(0.12), radius: 10, x: 0, y: 4)
-            .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 4)
+            .liquidGlass(cornerRadius: 20, opacity: 0.65)
             .onTapGesture {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
                     isPlayerExpanded = true
                 }
             }
@@ -137,11 +118,3 @@ struct MiniPlayerView: View {
     }
 }
 
-/// Анимация масштабирования кнопок при нажатии
-private struct ScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
-    }
-}
