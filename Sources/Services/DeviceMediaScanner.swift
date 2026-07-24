@@ -48,14 +48,17 @@ final class DeviceMediaScanner: ObservableObject {
                         let fileSize = (attributes[.size] as? Int64) ?? 0
                         let title = fileURL.deletingPathExtension().lastPathComponent
                         
+                        let relativePath = fileURL.path.replacingOccurrences(of: documentsURL.path + "/", with: "")
                         let track = LocalTrack(
                             id: "file_\(fileURL.lastPathComponent)",
                             title: title,
+                            source: .device,
+                            relativePath: relativePath,
+                            size: fileSize,
+                            addedAt: (attributes[.modificationDate] as? Date) ?? Date(),
                             artist: "Файлы iOS",
-                            sourceName: "Файлы",
-                            fileURL: fileURL,
-                            fileSize: fileSize,
-                            dateDownloaded: (attributes[.modificationDate] as? Date) ?? Date()
+                            duration: nil,
+                            localCoverPath: nil
                         )
                         foundTracks.append(track)
                     }
@@ -99,11 +102,13 @@ final class DeviceMediaScanner: ObservableObject {
                 let track = LocalTrack(
                     id: "applemusic_\(item.persistentID)",
                     title: title,
+                    source: .device,
+                    relativePath: assetURL.absoluteString,
+                    size: 0,
+                    addedAt: Date(),
                     artist: artist,
-                    sourceName: "Apple Music",
-                    fileURL: assetURL,
-                    fileSize: item.fileSize > 0 ? Int64(item.fileSize) : 0,
-                    dateDownloaded: Date()
+                    duration: item.playbackDuration,
+                    localCoverPath: nil
                 )
                 tracks.append(track)
             }
@@ -115,5 +120,6 @@ final class DeviceMediaScanner: ObservableObject {
             }
         }
     }
+
 
 }

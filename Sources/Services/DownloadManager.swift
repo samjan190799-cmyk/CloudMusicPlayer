@@ -8,12 +8,14 @@ enum TrackSource: String, Codable {
     case google = "google"
     case yandex = "yandex"
     case youtube = "youtube"
+    case device = "device"
     
     var displayName: String {
         switch self {
         case .google: return "Google Drive"
         case .yandex: return "Яндекс Диск"
         case .youtube: return "YouTube"
+        case .device: return "Устройство / Файлы"
         }
     }
 }
@@ -31,6 +33,9 @@ struct LocalTrack: Identifiable, Codable {
     var localCoverPath: String? = nil
     
     var localURL: URL {
+        if relativePath.hasPrefix("ipod-library://") || relativePath.hasPrefix("file://") {
+            return URL(string: relativePath) ?? URL(fileURLWithPath: relativePath)
+        }
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documentsDirectory.appendingPathComponent(relativePath)
     }
@@ -41,6 +46,7 @@ struct LocalTrack: Identifiable, Codable {
         return documentsDirectory.appendingPathComponent(coverPath)
     }
 }
+
 
 /// Состояние загрузки трека
 enum DownloadStatus {
