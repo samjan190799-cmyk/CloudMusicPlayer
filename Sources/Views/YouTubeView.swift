@@ -469,7 +469,7 @@ struct YouTubeView: View {
     private func trackRowView(for track: YouTubeTrack) -> some View {
         let playerTrack = convertToPlayerTrack(track)
         let isPlayingThis = playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing
-        let isDownloaded = downloadManager.isTrackDownloaded(id: track.id)
+        let isDownloaded = downloadManager.isDownloaded(trackId: track.id)
 
         return HStack(spacing: 12) {
             ZStack {
@@ -516,13 +516,14 @@ struct YouTubeView: View {
                 Button(action: {
                     HapticManager.shared.triggerImpact(style: .medium)
                     if !isDownloaded {
-                        downloadManager.startDownload(trackId: track.id, title: track.title, artist: track.uploader)
+                        downloadManager.downloadYouTubeTrack(track)
                     }
                 }) {
                     Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
                         .font(.system(size: 20))
                         .foregroundColor(isDownloaded ? .green : AppTheme.textSecondary)
                 }
+
 
                 // Добавление в плейлист
                 Button(action: {
