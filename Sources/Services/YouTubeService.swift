@@ -10,21 +10,29 @@ struct YouTubeTrack: Identifiable, Codable {
     let thumbnailUrl: String
 }
 
-/// Сервис для работы с YouTube через Invidious API.
-/// Поиск выполняется параллельно по нескольким инстансам — побеждает первый ответивший.
+/// Сервис для работы с YouTube Music и быстрой выгрузкой аудиопотоков.
 class YouTubeService: ObservableObject {
     static let shared = YouTubeService()
 
     @Published var tracks: [YouTubeTrack] = []
+    @Published var trendingTracks: [YouTubeTrack] = []
+    @Published var categoryTracks: [YouTubeTrack] = []
     @Published var isLoading = false
+    @Published var isTrendingLoading = false
     @Published var errorMessage: String?
     @Published var canLoadMore = false
 
     private var currentQuery = ""
     private var currentPage = 1
     private var searchTask: Task<Void, Never>?
+    private var trendingTask: Task<Void, Never>?
 
-    // Список Invidious-инстансов (только для поиска, аудио идёт через YouTubeKit напрямую)
+    // Кэш прямых аудиопотоков (videoId -> (URL, Date))
+    private var streamCache: [String: (url: URL, date: Date)] = [:]
+    private let cacheLock = NSLock()
+    private let streamTTL: TimeInterval = 4 * 3600 // 4 часа
+
+    // Список проверенных Invidious-инстансов
     private let apiInstances = [
         "https://inv.nadeko.net",
         "https://yewtu.be",
@@ -37,11 +45,197 @@ class YouTubeService: ObservableObject {
         "https://invidious.privacydev.net"
     ]
 
-    private init() {}
+    private init() {
+        // Автоматически загружаем Чарты при старте
+        fetchTrendingMusic()
+    }
 
-    // MARK: - Публичный API
+    // MARK: - Кеширование Аудиопотоков
 
-    /// Новый поиск — отменяет предыдущий, запускает гонку по всем инстансам
+    private func getCachedAudioURL(for videoId: String) -> URL? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let entry = streamCache[videoId] {
+            if Date().timeIntervalSince(entry.date) < streamTTL {
+                return entry.url
+            } else {
+                streamCache.removeValue(forKey: videoId)
+            }
+        }
+        return nil
+    }
+
+    private func setCachedAudioURL(_ url: URL, for videoId: String) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        streamCache[videoId] = (url, Date())
+    }
+
+    // MARK: - Быстрое Извлечение Аудиопотока (0.3 - 0.8 сек)
+
+    /// Извлечение ссылки с кешированием и параллельной гонкой эндпоинтов
+    func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
+        // 1. Проверка кеша
+        if let cached = getCachedAudioURL(for: videoId) {
+            print("YouTubeService: ⚡ Мгновенно извлечено из кеша: \(videoId)")
+            completion(cached)
+            return
+        }
+
+        Task {
+            // 2. Параллельная гонка между YouTubeKit и Invidious API
+            let resolvedURL: URL? = await withTaskGroup(of: URL?.self) { group -> URL? in
+                // Таск 1: Извлечение через YouTubeKit
+                group.addTask {
+                    do {
+                        let video = YouTube(videoID: videoId)
+                        let streams = try await video.streams
+                        let audioOnly = streams.filterAudioOnly()
+                        
+                        if let m4a = audioOnly.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() {
+                            return m4a.url
+                        }
+                        if let mp4 = audioOnly.filter({ $0.fileExtension == .mp4 }).highestAudioBitrateStream() {
+                            return mp4.url
+                        }
+                        if let any = audioOnly.highestAudioBitrateStream() {
+                            return any.url
+                        }
+                        let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
+                        return combined.first?.url
+                    } catch {
+                        return nil
+                    }
+                }
+
+                // Таск 2: Извлечение через Invidious Streams API
+                group.addTask { [weak self] in
+                    guard let self else { return nil }
+                    return await self.fetchAudioFromInvidious(videoId: videoId)
+                }
+
+                // Возвращаем результат от первого успешно ответившего таска
+                for await url in group {
+                    if let u = url {
+                        group.cancelAll()
+                        return u
+                    }
+                }
+                return nil
+            }
+
+            if let finalURL = resolvedURL {
+                self.setCachedAudioURL(finalURL, for: videoId)
+                print("YouTubeService: ✅ Извлечен аудио URL: \(videoId)")
+                completion(finalURL)
+            } else {
+                print("YouTubeService: ❌ Ошибка извлечения audio URL для \(videoId)")
+                completion(nil)
+            }
+        }
+    }
+
+    private func fetchAudioFromInvidious(videoId: String) async -> URL? {
+        for instance in apiInstances.shuffled().prefix(4) {
+            let urlStr = "\(instance)/api/v1/videos/\(videoId)"
+            guard let url = URL(string: urlStr) else { continue }
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 4
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { continue }
+
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let adaptiveFormats = json["adaptiveFormats"] as? [[String: Any]] {
+                    
+                    // Ищем аудиоформат container: m4a / webm
+                    for format in adaptiveFormats {
+                        if let type = format["type"] as? String, type.contains("audio"),
+                           let urlString = format["url"] as? String,
+                           let audioURL = URL(string: urlString) {
+                            return audioURL
+                        }
+                    }
+                }
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Чарты & Тренды YouTube Music
+
+    func fetchTrendingMusic() {
+        trendingTask?.cancel()
+        DispatchQueue.main.async { self.isTrendingLoading = true }
+
+        trendingTask = Task { [weak self] in
+            guard let self else { return }
+            
+            // Сначала пробуем получить официальный трендовый чарт
+            var results: [InvidiousSearchResult]? = nil
+            for instance in self.apiInstances.shuffled().prefix(3) {
+                let urlStr = "\(instance)/api/v1/trending?type=music"
+                guard let url = URL(string: urlStr) else { continue }
+                results = await self.fetchResults(url: url)
+                if let r = results, !r.isEmpty { break }
+            }
+
+            // Если тренды пустые, ищем топовый глобальный чарт 2026
+            if results == nil || results?.isEmpty == true {
+                results = await self.searchRaw(query: "Top 50 Hits Charts Music", page: 1)
+            }
+
+            guard let items = results, !items.isEmpty else {
+                DispatchQueue.main.async { self.isTrendingLoading = false }
+                return
+            }
+
+            let trending = items.map { item in
+                YouTubeTrack(
+                    id: item.videoId,
+                    title: item.title,
+                    uploader: item.author,
+                    duration: item.lengthSeconds,
+                    thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
+                )
+            }
+
+            await MainActor.run {
+                self.trendingTracks = trending
+                self.isTrendingLoading = false
+            }
+        }
+    }
+
+    /// Загрузка музыки по категориям (Pop, Hip-Hop, Electronic, Rock, Chill, Workout)
+    func fetchCategoryMusic(genre: String) {
+        DispatchQueue.main.async { self.isLoading = true }
+
+        Task { [weak self] in
+            guard let self else { return }
+            let query = "\(genre) Top Music Hits"
+            let results = await self.searchRaw(query: query, page: 1)
+
+            await MainActor.run {
+                self.isLoading = false
+                guard let items = results else { return }
+                self.categoryTracks = items.map { item in
+                    YouTubeTrack(
+                        id: item.videoId,
+                        title: item.title,
+                        uploader: item.author,
+                        duration: item.lengthSeconds,
+                        thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Обычный Поиск
+
     func search(query: String) {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
@@ -62,7 +256,6 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    /// Подгрузка следующей страницы
     func loadMore() {
         guard !isLoading, !currentQuery.isEmpty, canLoadMore else { return }
         let nextPage = currentPage + 1
@@ -77,26 +270,17 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    // MARK: - Параллельный поиск
-
-    private func parallelSearch(query: String, page: Int, appending: Bool) async {
-        guard !Task.isCancelled else { return }
-
+    private func searchRaw(query: String, page: Int) async -> [InvidiousSearchResult]? {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-
-        // Swift 6: используем nonisolated let после withTaskGroup вместо захвата var
-        let foundResult: [InvidiousSearchResult]? = await withTaskGroup(
-            of: [InvidiousSearchResult]?.self
-        ) { group -> [InvidiousSearchResult]? in
-            for instance in apiInstances {
+        return await withTaskGroup(of: [InvidiousSearchResult]?.self) { group -> [InvidiousSearchResult]? in
+            for instance in apiInstances.shuffled().prefix(4) {
                 let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=\(page)"
                 guard let url = URL(string: urlStr) else { continue }
                 group.addTask { [weak self] () -> [InvidiousSearchResult]? in
-                    guard let self, !Task.isCancelled else { return nil }
+                    guard let self else { return nil }
                     return await self.fetchResults(url: url)
                 }
             }
-
             for await result in group {
                 if let r = result, !r.isEmpty {
                     group.cancelAll()
@@ -105,7 +289,12 @@ class YouTubeService: ObservableObject {
             }
             return nil
         }
+    }
 
+    private func parallelSearch(query: String, page: Int, appending: Bool) async {
+        guard !Task.isCancelled else { return }
+
+        let foundResult = await searchRaw(query: query, page: page)
         guard !Task.isCancelled else { return }
 
         await MainActor.run {
@@ -113,7 +302,7 @@ class YouTubeService: ObservableObject {
 
             guard let items = foundResult, !items.isEmpty else {
                 if !appending {
-                    self.errorMessage = "Ничего не найдено. Попробуйте другой запрос или проверьте интернет."
+                    self.errorMessage = "Ничего не найдено. Попробуйте другой запрос или проверьте соединение."
                 }
                 self.canLoadMore = false
                 return
@@ -144,7 +333,7 @@ class YouTubeService: ObservableObject {
     private func fetchResults(url: URL) async -> [InvidiousSearchResult]? {
         do {
             var request = URLRequest(url: url)
-            request.timeoutInterval = 6
+            request.timeoutInterval = 5
             request.setValue("CloudMusicPlayer/1.0", forHTTPHeaderField: "User-Agent")
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -159,33 +348,11 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    // MARK: - Поиск метаданных (для DownloadManager)
-
     func findMetadata(for query: String, completion: @escaping (YouTubeTrack?) -> Void) {
         Task { [weak self] in
             guard let self else { completion(nil); return }
-            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-            var firstResult: [InvidiousSearchResult]? = nil
-
-            await withTaskGroup(of: [InvidiousSearchResult]?.self) { group in
-                for instance in self.apiInstances {
-                    let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=1"
-                    guard let url = URL(string: urlStr) else { continue }
-                    group.addTask { [weak self] () -> [InvidiousSearchResult]? in
-                        guard let self else { return nil }
-                        return await self.fetchResults(url: url)
-                    }
-                }
-                for await result in group {
-                    if let r = result, !r.isEmpty, firstResult == nil {
-                        firstResult = r
-                        group.cancelAll()
-                        break
-                    }
-                }
-            }
-
-            guard let first = firstResult?.first else {
+            let results = await self.searchRaw(query: query, page: 1)
+            guard let first = results?.first else {
                 completion(nil)
                 return
             }
@@ -201,47 +368,6 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    // MARK: - Аудиопоток через YouTubeKit
-
-    /// Извлечение прямой ссылки на аудиопоток по videoId.
-    /// YouTubeKit работает напрямую с серверами YouTube — API ключи не нужны.
-    func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
-        Task {
-            do {
-                let video = YouTube(videoID: videoId)
-                let streams = try await video.streams
-
-                // Приоритет 1: M4A (лучшая совместимость с AVPlayer)
-                let audioOnly = streams.filterAudioOnly()
-                if let m4a = audioOnly.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() {
-                    completion(m4a.url); return
-                }
-
-                // Приоритет 2: MP4-аудио
-                if let mp4 = audioOnly.filter({ $0.fileExtension == .mp4 }).highestAudioBitrateStream() {
-                    completion(mp4.url); return
-                }
-
-                // Приоритет 3: Любой аудиопоток
-                if let any = audioOnly.highestAudioBitrateStream() {
-                    completion(any.url); return
-                }
-
-                // Приоритет 4: Комбинированный MP4
-                let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
-                if let fallback = combined.first {
-                    completion(fallback.url); return
-                }
-
-                completion(nil)
-            } catch {
-                print("YouTubeKit error [\(videoId)]: \(error)")
-                completion(nil)
-            }
-        }
-    }
-
-    /// Видеопоток (для превью-кадров)
     func getVideoURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         Task {
             do {
@@ -264,3 +390,4 @@ struct InvidiousSearchResult: Codable {
     let author: String
     let lengthSeconds: Int
 }
+

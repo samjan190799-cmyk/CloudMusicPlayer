@@ -346,7 +346,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
             }
             return
         }
-        // 6. Стриминг с YouTube (получение ссылки на ходу через YouTubeKit)
+        // 6. Стриминг с YouTube (быстрое получение ссылки через YouTubeService + кеш)
         else if track.sourceName.contains("YouTube") {
             print("AudioPlayer: запрос аудио URL для YouTube трека: \(track.id) — \(track.title)")
             
@@ -366,7 +366,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     ]
                     let asset = AVURLAsset(url: audioUrl, options: assetOptions)
                     let item = AVPlayerItem(asset: asset)
-                    item.preferredForwardBufferDuration = 60
+                    item.preferredForwardBufferDuration = 5 // Мгновенный запуск после 5 сек буфера
                     
                     DispatchQueue.main.async {
                         try? AVAudioSession.sharedInstance().setActive(true)
