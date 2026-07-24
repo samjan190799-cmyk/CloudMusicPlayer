@@ -397,9 +397,9 @@ class AudioPlayerManager: NSObject, ObservableObject {
             }
             return
         }
-        // 6. Стриминг с YouTube (быстрое получение ссылки через YouTubeService + кеш)
-        else if track.sourceName.contains("YouTube") {
-            print("AudioPlayer: запрос аудио URL для YouTube трека: \(track.id) — \(track.title)")
+        // 6. Стриминг с YouTube и Аудиокниг (быстрое получение ссылки через YouTubeService + кеш)
+        else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+            print("AudioPlayer: запрос аудио URL для YouTube/Аудиокниги трека: \(track.id) — \(track.title)")
             
             YouTubeService.shared.getAudioURL(for: track.id) { [weak self] audioUrl in
                 guard let self = self else { return }
@@ -425,7 +425,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                         self.triggerCaching(for: track)
                     }
                 } else {
-                    print("AudioPlayer: ОШИБКА — не удалось получить аудио URL для YouTube трека \(track.id)")
+                    print("AudioPlayer: ОШИБКА — не удалось получить аудио URL для трека \(track.id)")
                     DispatchQueue.main.async {
                         self.playbackState = .stopped
                         self.endBackgroundTask()
@@ -474,7 +474,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     yandexPath: track.id
                 )
             }
-        } else if track.sourceName.contains("YouTube") {
+        } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
             CacheManager.shared.cacheTrack(
                 trackId: track.id,
                 title: track.title,
@@ -485,6 +485,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
             )
         }
     }
+
     
     private func setupPlayer(with item: AVPlayerItem, track: PlayerTrack) {
         cancellables.removeAll()
