@@ -27,12 +27,14 @@ struct ContentView: View {
                 case 0:
                     LibraryView()
                 case 1:
-                    DownloadsView()
+                    AudiobooksView()
                 case 2:
-                    CloudHubView(selectedTab: $selectedTab)
+                    DownloadsView()
                 case 3:
-                    YouTubeView()
+                    CloudHubView(selectedTab: $selectedTab)
                 case 4:
+                    YouTubeView()
+                case 5:
                     SettingsView()
                 default:
                     LibraryView()
@@ -69,18 +71,20 @@ struct ContentView: View {
     // MARK: - Кастомный стеклянный TabBar (Liquid Glass)
     
     private var customTabBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             tabButton(title: "Медиатека", icon: "folder.fill", index: 0)
-            tabButton(title: "Загрузки", icon: "arrow.down.circle.fill", index: 1)
-            tabButton(title: "Облако", icon: "cloud.fill", index: 2)
-            tabButton(title: "YouTube", icon: "play.rectangle.fill", index: 3)
-            tabButton(title: "Настройки", icon: "gearshape.fill", index: 4)
+            tabButton(title: "Книги", icon: "book.fill", index: 1)
+            tabButton(title: "Загрузки", icon: "arrow.down.circle.fill", index: 2)
+            tabButton(title: "Облако", icon: "cloud.fill", index: 3)
+            tabButton(title: "YouTube", icon: "play.rectangle.fill", index: 4)
+            tabButton(title: "Настройки", icon: "gearshape.fill", index: 5)
         }
         .padding(.vertical, 8)
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 4)
         .liquidGlass(cornerRadius: 26, opacity: 0.6)
         .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
     }
+
     
     private func tabButton(title: String, icon: String, index: Int) -> some View {
         let isSelected = selectedTab == index

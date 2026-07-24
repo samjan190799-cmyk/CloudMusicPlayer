@@ -174,14 +174,13 @@ struct YouTubeView: View {
                                 categoriesSection
                             } else if selectedTab == 2 {
                                 podcastsSection
-                            } else if selectedTab == 3 {
-                                audiobooksSection
                             } else {
                                 searchResultsSection
                             }
                         }
                         .padding(.bottom, 30)
                     }
+
                 }
             }
             .navigationBarHidden(true)
@@ -265,9 +264,8 @@ struct YouTubeView: View {
                 tabPickerButton(title: "🔥 Чарты", index: 0)
                 tabPickerButton(title: "🎧 Жанры", index: 1)
                 tabPickerButton(title: "🎙 Подкасты", index: 2)
-                tabPickerButton(title: "📚 Аудиокниги", index: 3)
                 if !service.tracks.isEmpty || !searchQuery.isEmpty {
-                    tabPickerButton(title: "🔍 Результаты", index: 4)
+                    tabPickerButton(title: "🔍 Результаты", index: 3)
                 }
             }
             .padding(4)
@@ -276,6 +274,7 @@ struct YouTubeView: View {
         .padding(.horizontal, 20)
         .padding(.bottom, 14)
     }
+
 
 
     private func tabPickerButton(title: String, index: Int) -> some View {
@@ -759,10 +758,9 @@ struct YouTubeView: View {
 
     private func performSearch() {
         guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        selectedTab = 4
+        selectedTab = 3
         service.search(query: searchQuery)
     }
-
 
     private func playTrack(_ track: YouTubeTrack) {
         HapticManager.shared.triggerImpact(style: .medium)
@@ -773,13 +771,13 @@ struct YouTubeView: View {
         case 0: tracksSource = service.trendingTracks
         case 1: tracksSource = service.categoryTracks
         case 2: tracksSource = service.podcastTracks
-        case 3: tracksSource = service.audiobookTracks
         default: tracksSource = service.tracks
         }
         
         let allCurrent = tracksSource.map { convertToPlayerTrack($0) }
         playerManager.play(track: playerTrack, in: allCurrent)
     }
+
 
 
 

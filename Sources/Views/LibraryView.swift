@@ -5,9 +5,10 @@ struct LibraryView: View {
     @ObservedObject var downloadManager = DownloadManager.shared
     @ObservedObject var playerManager = AudioPlayerManager.shared
     @ObservedObject var playlistManager = PlaylistManager.shared
+    @ObservedObject var deviceScanner = DeviceMediaScanner.shared
     
     @State private var searchText = ""
-    @State private var selectedSection = 0 // 0 - Треки, 1 - Плейлисты, 2 - Избранное
+    @State private var selectedSection = 0 // 0 - Загрузки, 1 - На устройстве, 2 - Плейлисты, 3 - Избранное
     @State private var selectedTrackForPlaylist: PlaylistTrack? = nil
     @State private var showingCreatePlaylistAlert = false
     @State private var newPlaylistName = ""
@@ -23,6 +24,18 @@ struct LibraryView: View {
         }
     }
     
+    var allDeviceAndFileTracks: [LocalTrack] {
+        let combined = deviceScanner.filesAppTracks + deviceScanner.deviceTracks
+        if searchText.isEmpty {
+            return combined
+        } else {
+            return combined.filter { track in
+                track.title.localizedCaseInsensitiveContains(searchText) ||
+                (track.artist?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+    }
+
     var favoritesTracks: [PlaylistTrack] {
         let allFavorites = playlistManager.playlists.first(where: { $0.id == PlaylistManager.favoritesUUID })?.tracks ?? []
         if searchText.isEmpty {
@@ -60,9 +73,12 @@ struct LibraryView: View {
                     ScrollView {
                         VStack(spacing: 20) {
                             if selectedSection == 0 {
-                                // Раздел "Треки"
+                                // Раздел "Загрузки"
                                 tracksSection
                             } else if selectedSection == 1 {
+                                // Раздел "На устройстве" (Apple Music + Файлы)
+                                deviceTracksSection
+                            } else if selectedSection == 2 {
                                 // Раздел "Плейлисты"
                                 playlistsSection
                             } else {
@@ -74,6 +90,7 @@ struct LibraryView: View {
                     }
                 }
             }
+
             .navigationBarHidden(true) // Скрываем стандартный навигейшн бар ради кастомного
             .sheet(item: $selectedTrackForPlaylist) { track in
                 AddToPlaylistView(track: track)
@@ -154,12 +171,15 @@ struct LibraryView: View {
     // MARK: - Кастомный переключатель разделов
     
     private var customSectionPicker: some View {
-        HStack(spacing: 0) {
-            sectionPickerButton(title: "Треки", index: 0)
-            sectionPickerButton(title: "Плейлисты", index: 1)
-            sectionPickerButton(title: "Избранное", index: 2)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                sectionPickerButton(title: "Загрузки", index: 0)
+                sectionPickerButton(title: "На устройстве", index: 1)
+                sectionPickerButton(title: "Плейлисты", index: 2)
+                sectionPickerButton(title: "Избранное", index: 3)
+            }
+            .padding(4)
         }
-        .padding(4)
         .liquidGlass(cornerRadius: 18, opacity: 0.5)
         .padding(.horizontal, 20)
         .padding(.bottom, 16)
@@ -175,10 +195,10 @@ struct LibraryView: View {
             }
         }) {
             Text(title)
-                .font(.system(size: 14, weight: isSelected ? .bold : .semibold))
+                .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                 .foregroundColor(isSelected ? .white : AppTheme.textMuted)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .background(
                     Group {
                         if isSelected {
@@ -193,6 +213,65 @@ struct LibraryView: View {
         }
         .buttonStyle(SpringScaleButtonStyle())
     }
+
+    // MARK: - Секция На Устройстве (Apple Music + Файлы iOS)
+    
+    private var deviceTracksSection: some View {
+        VStack(spacing: 16) {
+            searchBar
+            
+            HStack {
+                Text("Локальные файлы и Apple Music")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppTheme.textMuted)
+                
+                Spacer()
+                
+                Button(action: {
+                    HapticManager.shared.triggerSelection()
+                    deviceScanner.scanAllLocalSources()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Обновить")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppTheme.neonCyan)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(AppTheme.neonCyan.opacity(0.12)))
+                }
+            }
+            .padding(.horizontal, 20)
+            
+            if deviceScanner.isScanning {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                    Text("Сканирование файлов...")
+                        .font(.system(size: 13))
+                        .foregroundColor(AppTheme.textMuted)
+                    Spacer()
+                }
+                .padding(.vertical, 30)
+            } else if allDeviceAndFileTracks.isEmpty {
+                emptyState(
+                    icon: "iphone.radiowaves.left.and.right",
+                    title: "Файлы на устройстве не найдены",
+                    text: "Добавьте песни через приложение 'Файлы' в папку CloudMusicPlayer или разрешите доступ к Apple Music."
+                )
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(allDeviceAndFileTracks) { localTrack in
+                        trackRow(for: localTrack)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
 
     
     // MARK: - Секция треков (Раздел 0)

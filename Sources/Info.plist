@@ -28,7 +28,14 @@
     <array>
         <string>audio</string>
     </array>
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Разрешите доступ к медиатеке устройств для прослушивания локальной музыки из Apple Music и Файлов.</string>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
 </dict>
 </plist>
+

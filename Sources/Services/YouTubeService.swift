@@ -29,10 +29,10 @@ enum ChartRegion: String, CaseIterable, Identifiable {
     
     var searchQuery: String {
         switch self {
-        case .russia: return "Чарт Россия Топ 50 слушать"
-        case .global: return "Global Top 50 Music Charts"
-        case .usa: return "Billboard Top 100 Music"
-        case .tiktok: return "TikTok Тренды музыки 2026"
+        case .russia: return "Официальный трек клип слушать 2026 -сборник -mix -playlist"
+        case .global: return "Official song audio track 2026 -compilation -mix -playlist"
+        case .usa: return "Billboard hot 100 official audio song -compilation -mix -playlist"
+        case .tiktok: return "TikTok трек слушать 2026 -сборник -mix -playlist"
         }
     }
     
@@ -45,6 +45,7 @@ enum ChartRegion: String, CaseIterable, Identifiable {
         }
     }
 }
+
 
 /// Сервис для работы с YouTube Music и быстрой выгрузкой аудиопотоков.
 class YouTubeService: ObservableObject {
@@ -234,6 +235,32 @@ class YouTubeService: ObservableObject {
         return true
     }
 
+    /// Строгая фильтрация ТОЛЬКО сольных треков для Чартов (исключает 1-часовые сборки, миксы, топы)
+    private func isSingleSongTrack(_ item: InvidiousSearchResult) -> Bool {
+        // 1. Длительность одиночной песни: от 70 секунд до 360 секунд (6 минут max)
+        guard item.lengthSeconds >= 70 && item.lengthSeconds <= 360 else { return false }
+        
+        let title = item.title.lowercased()
+        let author = item.author.lowercased()
+        
+        // 2. Исключение сборок, миксов, подборок "Top 50", "Compilation"
+        let compilationKeywords = [
+            "top 50", "top 100", "top 20", "top 10", "top 30", "top 40",
+            "top songs", "best songs", "best of", "compilation", "сборник",
+            "микс", "mix", "megamix", "плейлист", "playlist", "full album",
+            "full audio", "greatest hits", "discography", "дискография",
+            "хиты 20", "песни 20", "mashup", "reverb", "speed up"
+        ]
+        
+        for keyword in compilationKeywords {
+            if title.contains(keyword) || author.contains(keyword) {
+                return false
+            }
+        }
+        
+        return isMusicTrack(item)
+    }
+
     // MARK: - Локальные Чарты & Тренды YouTube Music
 
     func fetchTrendingMusic(region: ChartRegion? = nil) {
@@ -246,13 +273,13 @@ class YouTubeService: ObservableObject {
         trendingTask = Task { [weak self] in
             guard let self else { return }
             
-            // 1. Пробуем получить официальный трендовый чарт с фильтрацией музыки
+            // 1. Пробуем получить официальный трендовый чарт с фильтрацией сольных треков
             var results: [InvidiousSearchResult]? = nil
             for instance in self.apiInstances.shuffled().prefix(3) {
                 let urlStr = "\(instance)/api/v1/trending?type=music&region=\(currentRegion.regionCode)"
                 guard let url = URL(string: urlStr) else { continue }
                 if let raw = await self.fetchResults(url: url) {
-                    let filtered = raw.filter { self.isMusicTrack($0) }
+                    let filtered = raw.filter { self.isSingleSongTrack($0) }
                     if !filtered.isEmpty {
                         results = filtered
                         break
@@ -260,12 +287,13 @@ class YouTubeService: ObservableObject {
                 }
             }
 
-            // 2. Если тренды пустые или содержат мало музыки, запрашиваем отфильтрованный музыкальный чарт
+            // 2. Если тренды пустые или содержат мало сольных песен, запрашиваем отфильтрованный музыкальный чарт
             if results == nil || (results?.count ?? 0) < 5 {
                 if let searchResults = await self.searchRaw(query: currentRegion.searchQuery, page: 1) {
-                    results = searchResults.filter { self.isMusicTrack($0) }
+                    results = searchResults.filter { self.isSingleSongTrack($0) }
                 }
             }
+
 
             guard let items = results, !items.isEmpty else {
                 DispatchQueue.main.async { self.isTrendingLoading = false }
