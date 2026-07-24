@@ -284,7 +284,7 @@ struct YouTubeView: View {
 
     // MARK: - Секция 1: Тренды и Топ-Чарты
 
-    private var trendingSection: View {
+    private var trendingSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Топ 50 Global & Hits")
@@ -365,7 +365,7 @@ struct YouTubeView: View {
 
     // MARK: - Секция 2: Жанры и Категории
 
-    private var categoriesSection: View {
+    private var categoriesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Популярные Жанры")
                 .font(.system(size: 20, weight: .bold))
@@ -427,7 +427,7 @@ struct YouTubeView: View {
 
     // MARK: - Секция 3: Результаты поиска
 
-    private var searchResultsSection: View {
+    private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Результаты поиска")
                 .font(.system(size: 20, weight: .bold))
