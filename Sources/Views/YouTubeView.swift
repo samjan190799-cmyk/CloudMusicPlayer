@@ -287,16 +287,49 @@ struct YouTubeView: View {
     private var trendingSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Топ 50 Global & Hits")
+                Text("Музыкальные Чарты")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.white)
                 Spacer()
                 if service.isTrendingLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
                 }
             }
             .padding(.horizontal, 20)
+
+            // Переключатель Региональных Чартов (Россия & СНГ, Global, USA, TikTok)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(ChartRegion.allCases) { region in
+                        let isSelected = service.selectedRegion == region
+                        Button(action: {
+                            HapticManager.shared.triggerSelection()
+                            service.fetchTrendingMusic(region: region)
+                        }) {
+                            Text(region.title)
+                                .font(.system(size: 13, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Group {
+                                        if isSelected {
+                                            AppTheme.primaryGradient
+                                                .clipShape(Capsule())
+                                                .neonGlow(color: AppTheme.neonCyan, radius: 6, opacity: 0.4)
+                                        } else {
+                                            Capsule()
+                                                .fill(Color.white.opacity(0.06))
+                                        }
+                                    }
+                                )
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+
 
             // Горизонтальная карусель Чартов
             ScrollView(.horizontal, showsIndicators: false) {

@@ -10,6 +10,42 @@ struct YouTubeTrack: Identifiable, Codable {
     let thumbnailUrl: String
 }
 
+enum ChartRegion: String, CaseIterable, Identifiable {
+    case russia = "RU"
+    case global = "Global"
+    case usa = "US"
+    case tiktok = "TikTok"
+    
+    var id: String { rawValue }
+    
+    var title: String {
+        switch self {
+        case .russia: return "🇷🇺 Россия & СНГ"
+        case .global: return "🌍 Global 50"
+        case .usa: return "🇺🇸 USA Hits"
+        case .tiktok: return "🔥 TikTok Тренды"
+        }
+    }
+    
+    var searchQuery: String {
+        switch self {
+        case .russia: return "Чарт Россия Топ 50 слушать"
+        case .global: return "Global Top 50 Music Charts"
+        case .usa: return "Billboard Top 100 Music"
+        case .tiktok: return "TikTok Тренды музыки 2026"
+        }
+    }
+    
+    var regionCode: String {
+        switch self {
+        case .russia: return "RU"
+        case .global: return "US"
+        case .usa: return "US"
+        case .tiktok: return "RU"
+        }
+    }
+}
+
 /// Сервис для работы с YouTube Music и быстрой выгрузкой аудиопотоков.
 class YouTubeService: ObservableObject {
     static let shared = YouTubeService()
@@ -17,6 +53,7 @@ class YouTubeService: ObservableObject {
     @Published var tracks: [YouTubeTrack] = []
     @Published var trendingTracks: [YouTubeTrack] = []
     @Published var categoryTracks: [YouTubeTrack] = []
+    @Published var selectedRegion: ChartRegion = .russia
     @Published var isLoading = false
     @Published var isTrendingLoading = false
     @Published var errorMessage: String?
@@ -47,7 +84,7 @@ class YouTubeService: ObservableObject {
 
     private init() {
         // Автоматически загружаем Чарты при старте
-        fetchTrendingMusic()
+        fetchTrendingMusic(region: .russia)
     }
 
     // MARK: - Кеширование Аудиопотоков
@@ -164,27 +201,30 @@ class YouTubeService: ObservableObject {
         return nil
     }
 
-    // MARK: - Чарты & Тренды YouTube Music
+    // MARK: - Локальные Чарты & Тренды YouTube Music
 
-    func fetchTrendingMusic() {
+    func fetchTrendingMusic(region: ChartRegion? = nil) {
+        let currentRegion = region ?? selectedRegion
+        self.selectedRegion = currentRegion
+
         trendingTask?.cancel()
         DispatchQueue.main.async { self.isTrendingLoading = true }
 
         trendingTask = Task { [weak self] in
             guard let self else { return }
             
-            // Сначала пробуем получить официальный трендовый чарт
+            // Сначала пробуем получить официальный трендовый чарт с учетом региона
             var results: [InvidiousSearchResult]? = nil
             for instance in self.apiInstances.shuffled().prefix(3) {
-                let urlStr = "\(instance)/api/v1/trending?type=music"
+                let urlStr = "\(instance)/api/v1/trending?type=music&region=\(currentRegion.regionCode)"
                 guard let url = URL(string: urlStr) else { continue }
                 results = await self.fetchResults(url: url)
                 if let r = results, !r.isEmpty { break }
             }
 
-            // Если тренды пустые, ищем топовый глобальный чарт 2026
+            // Если тренды пустые, ищем топовый локальный чарт
             if results == nil || results?.isEmpty == true {
-                results = await self.searchRaw(query: "Top 50 Hits Charts Music", page: 1)
+                results = await self.searchRaw(query: currentRegion.searchQuery, page: 1)
             }
 
             guard let items = results, !items.isEmpty else {

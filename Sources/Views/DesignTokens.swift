@@ -99,46 +99,48 @@ struct AmbientBackgroundView: View {
             AppTheme.darkBackgroundGradient
                 .ignoresSafeArea()
             
-            // Живые разноцветные светящиеся шары на фоне
+            // Живые разноцветные светящиеся шары на фоне (Hardware Accelerated Metal Rendering)
             GeometryReader { proxy in
                 let size = proxy.size
                 
                 Circle()
-                    .fill(accentColor.opacity(0.28))
-                    .blur(radius: 70)
+                    .fill(accentColor.opacity(0.25))
+                    .blur(radius: 60)
                     .frame(width: size.width * 0.85, height: size.width * 0.85)
                     .offset(
-                        x: animateBlobs ? -size.width * 0.2 : size.width * 0.15,
-                        y: animateBlobs ? -size.height * 0.15 : size.height * 0.1
+                        x: animateBlobs ? -size.width * 0.18 : size.width * 0.12,
+                        y: animateBlobs ? -size.height * 0.12 : size.height * 0.08
                     )
                 
                 Circle()
-                    .fill(secondaryColor.opacity(0.24))
-                    .blur(radius: 80)
+                    .fill(secondaryColor.opacity(0.22))
+                    .blur(radius: 70)
                     .frame(width: size.width * 0.9, height: size.width * 0.9)
                     .offset(
-                        x: animateBlobs ? size.width * 0.25 : -size.width * 0.1,
-                        y: animateBlobs ? size.height * 0.2 : -size.height * 0.05
+                        x: animateBlobs ? size.width * 0.22 : -size.width * 0.08,
+                        y: animateBlobs ? size.height * 0.18 : -size.height * 0.04
                     )
                 
                 Circle()
-                    .fill(AppTheme.neonPink.opacity(0.15))
-                    .blur(radius: 90)
+                    .fill(AppTheme.neonPink.opacity(0.14))
+                    .blur(radius: 75)
                     .frame(width: size.width * 0.7, height: size.width * 0.7)
                     .offset(
-                        x: animateBlobs ? -size.width * 0.1 : size.width * 0.2,
-                        y: animateBlobs ? size.height * 0.35 : size.height * 0.25
+                        x: animateBlobs ? -size.width * 0.08 : size.width * 0.18,
+                        y: animateBlobs ? size.height * 0.3 : size.height * 0.22
                     )
             }
+            .drawingGroup() // Аппаратное ускорение Metal для предотвращения нагрева GPU/CPU
             .ignoresSafeArea()
             .onAppear {
                 withAnimation(
-                    .easeInOut(duration: 8.0)
+                    .easeInOut(duration: 12.0)
                     .repeatForever(autoreverses: true)
                 ) {
                     animateBlobs.toggle()
                 }
             }
+
             
             // Легкий темный оверлей для идеальной читаемости
             Color.black.opacity(0.25)
