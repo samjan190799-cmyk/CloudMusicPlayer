@@ -480,7 +480,11 @@ struct YouTubeView: View {
                 }
                 .padding(.horizontal, 20)
             }
+        }
+    }
+
     // MARK: - Секция 3: Подкасты
+
 
     private var podcastsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -755,9 +759,10 @@ struct YouTubeView: View {
 
     private func performSearch() {
         guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        selectedTab = 2
+        selectedTab = 4
         service.search(query: searchQuery)
     }
+
 
     private func playTrack(_ track: YouTubeTrack) {
         HapticManager.shared.triggerImpact(style: .medium)

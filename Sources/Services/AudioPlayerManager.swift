@@ -520,6 +520,13 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     self?.updateNowPlayingInfo(for: track)
                     self?.playbackState = .playing
                     self?.player?.playImmediately(atRate: 1.0) // Моментальный запуск
+                    
+                    // 📌 Автоматическое возобновление позиции для Аудиокниг и Подкастов
+                    if let savedPos = self?.getSavedPlayheadPosition(for: track.id), savedPos > 5 {
+                        print("AudioPlayerManager: 📌 Возобновление с сохраненной позиции: \(savedPos) сек")
+                        self?.seek(to: savedPos)
+                    }
+                    
                     self?.updateSharedPlayerState()
                     self?.endBackgroundTask()
                 } else if status == .failed {
@@ -530,20 +537,35 @@ class AudioPlayerManager: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Обсервация текущего времени проигрывания
+        // Обсервация текущего времени проигрывания и автосохранение позиции
         removeTimeObserver()
-        let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)
+        let interval = CMTime(seconds: 1.0, preferredTimescale: 1000)
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             guard self.playbackState != .loading else { return }
             let seconds = CMTimeGetSeconds(time)
             if !seconds.isNaN {
                 self.currentTime = seconds
+                // Сохраняем позицию каждые 2 секунды прослушивания
+                if Int(seconds) % 2 == 0 {
+                    self.savePlayheadPosition(for: track.id, position: seconds)
+                }
             }
         }
         
         updateNowPlayingInfo(for: track)
     }
+
+    private func savePlayheadPosition(for trackId: String, position: Double) {
+        guard position > 5 else { return }
+        UserDefaults.standard.set(position, forKey: "playhead_\(trackId)")
+    }
+    
+    private func getSavedPlayheadPosition(for trackId: String) -> Double? {
+        let val = UserDefaults.standard.double(forKey: "playhead_\(trackId)")
+        return val > 5 ? val : nil
+    }
+
 
     
     private func removeTimeObserver() {
