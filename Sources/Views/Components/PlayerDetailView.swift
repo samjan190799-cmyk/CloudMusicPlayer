@@ -54,9 +54,14 @@ struct PlayerDetailView: View {
                         progressSliderView
                             .padding(.bottom, 24)
                         
+                        // Панель управления для Аудиокниг и Подкастов (Перемотка -15с/+30с, Скорость, Таймер Сна)
+                        audiobookAndPodcastControlsView
+                            .padding(.bottom, 16)
+
                         // Кнопки управления (Назад, Играть, Вперед, Шафл, Репит)
                         controlPanelView
                             .padding(.bottom, 24)
+
                         
                         // Слайдер громкости
                         volumeControlView
@@ -569,6 +574,95 @@ struct PlayerDetailView: View {
             .buttonStyle(ScaleButtonStyle())
         }
     }
+    
+    // MARK: - Элементы управления для Аудиокниг и Подкастов
+    
+    private var audiobookAndPodcastControlsView: some View {
+        HStack(spacing: 12) {
+            // Быстрая перемотка назад -15с
+            Button(action: {
+                HapticManager.shared.triggerImpact(style: .light)
+                playerManager.skipBackward15()
+            }) {
+                HStack(spacing: 2) {
+                    Image(systemName: "gobackward.15")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundColor(.white.opacity(0.85))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+            }
+
+            // Переключатель скорости (0.75x, 1.0x, 1.25x, 1.5x, 2.0x)
+            Menu {
+                Button("0.75x") { playerManager.setPlaybackRate(0.75) }
+                Button("1.0x (Обычная)") { playerManager.setPlaybackRate(1.0) }
+                Button("1.25x") { playerManager.setPlaybackRate(1.25) }
+                Button("1.5x") { playerManager.setPlaybackRate(1.5) }
+                Button("1.75x") { playerManager.setPlaybackRate(1.75) }
+                Button("2.0x") { playerManager.setPlaybackRate(2.0) }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "gauge.with.dots.needle.bottom.50percent")
+                        .font(.system(size: 12))
+                    Text(String(format: "%.2fx", playerManager.playbackRate))
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(AppTheme.neonCyan)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(AppTheme.neonCyan.opacity(0.15)))
+            }
+
+            // Таймер Сна (Sleep Timer)
+            Menu {
+                Button("Выключить таймер") { playerManager.setSleepTimer(minutes: 0) }
+                Button("15 минут") { playerManager.setSleepTimer(minutes: 15) }
+                Button("30 минут") { playerManager.setSleepTimer(minutes: 30) }
+                Button("45 минут") { playerManager.setSleepTimer(minutes: 45) }
+                Button("60 минут") { playerManager.setSleepTimer(minutes: 60) }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 12))
+                    if let remaining = playerManager.sleepTimerTimeRemaining {
+                        Text(formatRemainingTime(remaining))
+                            .font(.system(size: 11, weight: .bold))
+                    } else {
+                        Text("Таймер")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                }
+                .foregroundColor(playerManager.sleepTimerTimeRemaining != nil ? AppTheme.neonPink : .white.opacity(0.7))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(playerManager.sleepTimerTimeRemaining != nil ? AppTheme.neonPink.opacity(0.2) : Color.white.opacity(0.08)))
+            }
+
+            // Быстрая перемотка вперед +30с
+            Button(action: {
+                HapticManager.shared.triggerImpact(style: .light)
+                playerManager.skipForward30()
+            }) {
+                HStack(spacing: 2) {
+                    Image(systemName: "goforward.30")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundColor(.white.opacity(0.85))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+            }
+        }
+    }
+
+    private func formatRemainingTime(_ time: TimeInterval) -> String {
+        let mins = Int(time) / 60
+        let secs = Int(time) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+
     
     private func controlButtonBackground(icon: String, size: CGFloat = 46, iconSize: CGFloat = 14, isSelected: Bool = false) -> some View {
         ZStack {

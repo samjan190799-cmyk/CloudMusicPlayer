@@ -58,10 +58,16 @@ class AudioPlayerManager: NSObject, ObservableObject {
     @Published var repeatMode: RepeatMode = .none
     @Published var isShuffleEnabled = false
     
+    // Настройки для Аудиокниг и Подкастов (Скорость, Таймер Сна, Перемотка)
+    @Published var playbackRate: Float = 1.0
+    @Published var sleepTimerTimeRemaining: TimeInterval? = nil
+    private var sleepTimer: Timer? = nil
+    
     // Очередь треков
     @Published var playlist: [PlayerTrack] = []
     private var shuffledPlaylist: [PlayerTrack] = []
     private var currentTrackIndex: Int = -1
+
     
     private var player: AVPlayer?
     private var timeObserverToken: Any?
@@ -253,6 +259,52 @@ class AudioPlayerManager: NSObject, ObservableObject {
             }
         }
     }
+    
+    // MARK: - Функционал для Аудиокниг и Подкастов
+    
+    /// Установка скорости воспроизведения (0.75x, 1.0x, 1.25x, 1.5x, 2.0x)
+    func setPlaybackRate(_ rate: Float) {
+        playbackRate = rate
+        if playbackState == .playing {
+            player?.rate = rate
+        }
+    }
+    
+    /// Быстрый шаг назад на 15 секунд (для аудиокниг / подкастов)
+    func skipBackward15() {
+        let target = max(0, currentTime - 15)
+        seek(to: target)
+    }
+    
+    /// Быстрый шаг вперед на 30 секунд (для аудиокниг / подкастов)
+    func skipForward30() {
+        let target = min(duration, currentTime + 30)
+        seek(to: target)
+    }
+    
+    /// Установка таймера сна (в минутах)
+    func setSleepTimer(minutes: Int) {
+        sleepTimer?.invalidate()
+        if minutes <= 0 {
+            sleepTimerTimeRemaining = nil
+            return
+        }
+        
+        let totalSeconds = TimeInterval(minutes * 60)
+        sleepTimerTimeRemaining = totalSeconds
+        
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            if let remaining = self.sleepTimerTimeRemaining, remaining > 1 {
+                self.sleepTimerTimeRemaining = remaining - 1
+            } else {
+                timer.invalidate()
+                self.sleepTimerTimeRemaining = nil
+                self.togglePlayPause() // Плавная пауза по истечении таймера
+            }
+        }
+    }
+
     
     // MARK: - Вспомогательные методы
     

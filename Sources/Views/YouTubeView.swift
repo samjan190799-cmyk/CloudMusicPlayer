@@ -122,9 +122,27 @@ struct YouTubeView: View {
     @ObservedObject var playlistManager = PlaylistManager.shared
 
     @State private var searchQuery = ""
-    @State private var selectedTab = 0 // 0 = Чарты & Тренды, 1 = Жанры, 2 = Поиск
+    @State private var selectedTab = 0 // 0 = Чарты, 1 = Жанры, 2 = Подкасты, 3 = Аудиокниги, 4 = Поиск
     @State private var selectedGenre = "Pop"
+    @State private var selectedPodcastCategory = "Популярные"
+    @State private var selectedAudiobookCategory = "Бестселлеры"
     @State private var selectedTrackForPlaylist: PlaylistTrack? = nil
+
+    private let podcastCategories = [
+        ("🔥 Популярные", "Популярные"),
+        ("🧠 Психология", "Психология"),
+        ("💻 IT & Технологии", "IT Технологии"),
+        ("📜 История & Мир", "История"),
+        ("💼 Бизнес & Финансы", "Бизнес")
+    ]
+
+    private let audiobookCategories = [
+        ("⭐ Бестселлеры", "Бестселлеры"),
+        ("🚀 Фантастика & Фэнтези", "Фантастика"),
+        ("🔍 Детективы & Триллеры", "Детективы"),
+        ("📖 Классика", "Классика"),
+        ("💡 Саморазвитие", "Саморазвитие")
+    ]
 
     private let genres = [
         ("🔥 Поп", "Pop"),
@@ -151,13 +169,14 @@ struct YouTubeView: View {
                     ScrollView {
                         VStack(spacing: 24) {
                             if selectedTab == 0 {
-                                // 1. Тренды и Топ-Чарты
                                 trendingSection
                             } else if selectedTab == 1 {
-                                // 2. Жанровые подборки
                                 categoriesSection
+                            } else if selectedTab == 2 {
+                                podcastsSection
+                            } else if selectedTab == 3 {
+                                audiobooksSection
                             } else {
-                                // 3. Результаты поиска
                                 searchResultsSection
                             }
                         }
@@ -172,6 +191,7 @@ struct YouTubeView: View {
         }
         .preferredColorScheme(.dark)
     }
+
 
     // MARK: - Хедер и Поисковая панель
 
@@ -240,18 +260,23 @@ struct YouTubeView: View {
     // MARK: - Переключатель Вкладок
 
     private var sectionPickerView: some View {
-        HStack(spacing: 0) {
-            tabPickerButton(title: "🔥 Тренды & Чарты", index: 0)
-            tabPickerButton(title: "🎧 Жанры", index: 1)
-            if !service.tracks.isEmpty || !searchQuery.isEmpty {
-                tabPickerButton(title: "🔍 Результаты", index: 2)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                tabPickerButton(title: "🔥 Чарты", index: 0)
+                tabPickerButton(title: "🎧 Жанры", index: 1)
+                tabPickerButton(title: "🎙 Подкасты", index: 2)
+                tabPickerButton(title: "📚 Аудиокниги", index: 3)
+                if !service.tracks.isEmpty || !searchQuery.isEmpty {
+                    tabPickerButton(title: "🔍 Результаты", index: 4)
+                }
             }
+            .padding(4)
         }
-        .padding(4)
         .liquidGlass(cornerRadius: 18, opacity: 0.5)
         .padding(.horizontal, 20)
         .padding(.bottom, 14)
     }
+
 
     private func tabPickerButton(title: String, index: Int) -> some View {
         let isSelected = selectedTab == index
@@ -455,10 +480,160 @@ struct YouTubeView: View {
                 }
                 .padding(.horizontal, 20)
             }
+    // MARK: - Секция 3: Подкасты
+
+    private var podcastsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("🎙 Подкасты")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(podcastCategories, id: \.1) { name, key in
+                        let isSelected = selectedPodcastCategory == key
+                        Button(action: {
+                            selectedPodcastCategory = key
+                            HapticManager.shared.triggerSelection()
+                            service.fetchPodcasts(category: key)
+                        }) {
+                            Text(name)
+                                .font(.system(size: 13, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Group {
+                                        if isSelected {
+                                            AppTheme.accentGradient
+                                                .clipShape(Capsule())
+                                                .neonGlow(color: AppTheme.neonPurple, radius: 6, opacity: 0.4)
+                                        } else {
+                                            Capsule()
+                                                .fill(Color.white.opacity(0.06))
+                                        }
+                                    }
+                                )
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+
+            if service.isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonPurple))
+                    Spacer()
+                }
+                .padding(.vertical, 40)
+            } else if service.podcastTracks.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "mic.slash")
+                        .font(.system(size: 36))
+                        .foregroundColor(AppTheme.textMuted)
+                    Text("Нажмите на категорию подкастов для выгрузки")
+                        .font(.system(size: 13))
+                        .foregroundColor(AppTheme.textMuted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(service.podcastTracks) { track in
+                        trackRowView(for: track)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+        .onAppear {
+            if service.podcastTracks.isEmpty {
+                service.fetchPodcasts(category: "Популярные")
+            }
         }
     }
 
-    // MARK: - Секция 3: Результаты поиска
+    // MARK: - Секция 4: Аудиокниги
+
+    private var audiobooksSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("📚 Аудиокниги")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(audiobookCategories, id: \.1) { name, key in
+                        let isSelected = selectedAudiobookCategory == key
+                        Button(action: {
+                            selectedAudiobookCategory = key
+                            HapticManager.shared.triggerSelection()
+                            service.fetchAudiobooks(category: key)
+                        }) {
+                            Text(name)
+                                .font(.system(size: 13, weight: isSelected ? .bold : .medium))
+                                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Group {
+                                        if isSelected {
+                                            AppTheme.primaryGradient
+                                                .clipShape(Capsule())
+                                                .neonGlow(color: AppTheme.neonCyan, radius: 6, opacity: 0.4)
+                                        } else {
+                                            Capsule()
+                                                .fill(Color.white.opacity(0.06))
+                                        }
+                                    }
+                                )
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+
+            if service.isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                    Spacer()
+                }
+                .padding(.vertical, 40)
+            } else if service.audiobookTracks.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "book.closed")
+                        .font(.system(size: 36))
+                        .foregroundColor(AppTheme.textMuted)
+                    Text("Нажмите на жанр аудиокниг для выгрузки релиза")
+                        .font(.system(size: 13))
+                        .foregroundColor(AppTheme.textMuted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(service.audiobookTracks) { track in
+                        trackRowView(for: track)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+        .onAppear {
+            if service.audiobookTracks.isEmpty {
+                service.fetchAudiobooks(category: "Бестселлеры")
+            }
+        }
+    }
+
+    // MARK: - Секция 5: Результаты поиска
+
 
     private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -588,11 +763,19 @@ struct YouTubeView: View {
         HapticManager.shared.triggerImpact(style: .medium)
         let playerTrack = convertToPlayerTrack(track)
         
-        let allCurrent = (selectedTab == 0 ? service.trendingTracks : (selectedTab == 1 ? service.categoryTracks : service.tracks))
-            .map { convertToPlayerTrack($0) }
+        let tracksSource: [YouTubeTrack]
+        switch selectedTab {
+        case 0: tracksSource = service.trendingTracks
+        case 1: tracksSource = service.categoryTracks
+        case 2: tracksSource = service.podcastTracks
+        case 3: tracksSource = service.audiobookTracks
+        default: tracksSource = service.tracks
+        }
         
+        let allCurrent = tracksSource.map { convertToPlayerTrack($0) }
         playerManager.play(track: playerTrack, in: allCurrent)
     }
+
 
 
     private func convertToPlayerTrack(_ track: YouTubeTrack) -> PlayerTrack {

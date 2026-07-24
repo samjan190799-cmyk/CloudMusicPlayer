@@ -53,11 +53,14 @@ class YouTubeService: ObservableObject {
     @Published var tracks: [YouTubeTrack] = []
     @Published var trendingTracks: [YouTubeTrack] = []
     @Published var categoryTracks: [YouTubeTrack] = []
+    @Published var podcastTracks: [YouTubeTrack] = []
+    @Published var audiobookTracks: [YouTubeTrack] = []
     @Published var selectedRegion: ChartRegion = .russia
     @Published var isLoading = false
     @Published var isTrendingLoading = false
     @Published var errorMessage: String?
     @Published var canLoadMore = false
+
 
     private var currentQuery = ""
     private var currentPage = 1
@@ -313,8 +316,66 @@ class YouTubeService: ObservableObject {
         }
     }
 
+    // MARK: - Загрузка Подкастов и Аудиокниг
+
+    /// Загрузка Подкастов (Психология, IT, История, Бизнес, Развлечения)
+    func fetchPodcasts(category: String = "Популярные") {
+        DispatchQueue.main.async { self.isLoading = true }
+        Task { [weak self] in
+            guard let self else { return }
+            let query = "Подкаст \(category) 2026 выпуск"
+            let rawResults = await self.searchRaw(query: query, page: 1)
+
+            await MainActor.run {
+                self.isLoading = false
+                guard let items = rawResults else { return }
+                // Подкасты имеют хронометраж от 5 минут до 3 часов (300с - 10800с)
+                let podcasts = items.filter { item in
+                    item.lengthSeconds >= 240 && item.lengthSeconds <= 10800
+                }.map { item in
+                    YouTubeTrack(
+                        id: item.videoId,
+                        title: item.title,
+                        uploader: item.author,
+                        duration: item.lengthSeconds,
+                        thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
+                    )
+                }
+                self.podcastTracks = podcasts
+            }
+        }
+    }
+
+    /// Загрузка Аудиокниг (Бестселлеры, Фантастика, Саморазвитие, Классика)
+    func fetchAudiobooks(category: String = "Бестселлеры") {
+        DispatchQueue.main.async { self.isLoading = true }
+        Task { [weak self] in
+            guard let self else { return }
+            let query = "Аудиокнига \(category) слушать полностью"
+            let rawResults = await self.searchRaw(query: query, page: 1)
+
+            await MainActor.run {
+                self.isLoading = false
+                guard let items = rawResults else { return }
+                // Аудиокниги обычно от 10 минут до 6 часов (600с - 21600с)
+                let books = items.filter { item in
+                    item.lengthSeconds >= 480 && item.lengthSeconds <= 21600
+                }.map { item in
+                    YouTubeTrack(
+                        id: item.videoId,
+                        title: item.title,
+                        uploader: item.author,
+                        duration: item.lengthSeconds,
+                        thumbnailUrl: "https://img.youtube.com/vi/\(item.videoId)/maxresdefault.jpg"
+                    )
+                }
+                self.audiobookTracks = books
+            }
+        }
+    }
 
     // MARK: - Обычный Поиск
+
 
     func search(query: String) {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
