@@ -580,9 +580,10 @@ class AudioPlayerManager: NSObject, ObservableObject {
         guard nextIndex >= 0 && nextIndex < activePlaylist.count else { return }
         let nextTrack = activePlaylist[nextIndex]
         if nextTrack.sourceName == "YouTube Music" || nextTrack.sourceName == "Аудиокниги" {
-            YouTubeService.shared.getStreamURL(for: nextTrack.id) { _ in }
+            YouTubeService.shared.getAudioURL(for: nextTrack.id) { _ in }
         }
     }
+
 
 
 
