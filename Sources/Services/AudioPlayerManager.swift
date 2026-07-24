@@ -539,9 +539,13 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     self?.updateSharedPlayerState()
                     self?.endBackgroundTask()
                 } else if status == .failed {
+                    print("AudioPlayerManager: ❌ Ошибка воспроизведения элемента: \(String(describing: item.error))")
+                    if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+                        // Сбрасываем кеш невалидного/просроченного аудио URL для YouTube
+                        YouTubeService.shared.invalidateStreamCache(for: track.id)
+                    }
                     self?.playbackState = .stopped
                     self?.endBackgroundTask()
-                    print("Ошибка воспроизведения элемента: \(String(describing: item.error))")
                 }
             }
             .store(in: &cancellables)

@@ -71,19 +71,19 @@ class YouTubeService: ObservableObject {
     // Кэш прямых аудиопотоков (videoId -> (URL, Date))
     private var streamCache: [String: (url: URL, date: Date)] = [:]
     private let cacheLock = NSLock()
-    private let streamTTL: TimeInterval = 4 * 3600 // 4 часа
+    private let streamTTL: TimeInterval = 3600 // 1 час (исключает 403 Forbidden из-за просроченных ссылок)
 
-    // Список проверенных Invidious-инстансов
+    // Список проверенных Invidious-инстансов (актуальные зеркала)
     private let apiInstances = [
         "https://inv.nadeko.net",
         "https://yewtu.be",
         "https://invidious.nerdvpn.de",
+        "https://invidious.flokinet.to",
+        "https://inv.tux.pizza",
+        "https://invidious.drgns.space",
+        "https://invidious.privacydev.net",
         "https://invidious.f5.si",
-        "https://invidious.tiekoetter.com",
-        "https://yt.chocolatemoo53.com",
-        "https://inv.zoomerville.com",
-        "https://vid.puffyan.us",
-        "https://invidious.privacydev.net"
+        "https://invidious.tiekoetter.com"
     ]
 
     private init() {
@@ -92,6 +92,13 @@ class YouTubeService: ObservableObject {
     }
 
     // MARK: - Кеширование Аудиопотоков
+
+    func invalidateStreamCache(for videoId: String) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        streamCache.removeValue(forKey: videoId)
+        print("YouTubeService: 🔄 Кеш аудиопотока сброшен для \(videoId)")
+    }
 
     private func getCachedAudioURL(for videoId: String) -> URL? {
         cacheLock.lock()
