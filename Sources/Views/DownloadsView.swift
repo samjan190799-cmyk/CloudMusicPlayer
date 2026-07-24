@@ -501,6 +501,7 @@ struct DownloadsView: View {
         case .google: return .purple
         case .yandex: return .red
         case .youtube: return .orange
+        case .device: return .cyan
         }
     }
     
@@ -509,6 +510,7 @@ struct DownloadsView: View {
         case .google: return "cloud.fill"
         case .yandex: return "icloud.fill"
         case .youtube: return "play.rectangle.fill"
+        case .device: return "iphone"
         }
     }
     
@@ -517,8 +519,10 @@ struct DownloadsView: View {
         case .google: return "DRIVE"
         case .yandex: return "YANDEX"
         case .youtube: return "YOUTUBE"
+        case .device: return "DEVICE"
         }
     }
+
 }
 
 // MARK: - Локальный ScaleButtonStyle (без конфликтов)
