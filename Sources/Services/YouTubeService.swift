@@ -201,6 +201,36 @@ class YouTubeService: ObservableObject {
         return nil
     }
 
+    // MARK: - Валидация Музыкального Контента (Строгая Фильтрация)
+
+    private func isMusicTrack(_ item: InvidiousSearchResult) -> Bool {
+        // 1. Фильтр длительности: только песни от 50 секунд до 8 минут (480 сек)
+        guard item.lengthSeconds >= 50 && item.lengthSeconds <= 480 else { return false }
+        
+        let title = item.title.lowercased()
+        let author = item.author.lowercased()
+        
+        // 2. Черный список ключевых слов (игры, киберспорт, проповеди, комедии, подкасты, стримы)
+        let forbiddenKeywords = [
+            "cs:go", "cs2", "blast", "gameplay", "walkthrough", "lets play", "let's play",
+            "gaming", "rust", "pubg", "dota", "dota 2", "minecraft", "apex", "valorant",
+            "league of legends", "fortnite", "genshin", "gta", "tournament", "major",
+            "qualifier", "podcast", "sermon", "news", "full stream", "live stream",
+            "episode", "ep.", "highlights", "reaction", "review", "vlog", "movie",
+            "film", "trailer", "asmr", "interview", "documentary", "tutorial", "lesson",
+            "preaching", "prayer", "command your morning", "day 1", "day 2", "day 3",
+            "streamer", "twitch", "match", "vs", "versus", "comedy", "show", "talk"
+        ]
+        
+        for keyword in forbiddenKeywords {
+            if title.contains(keyword) || author.contains(keyword) {
+                return false
+            }
+        }
+        
+        return true
+    }
+
     // MARK: - Локальные Чарты & Тренды YouTube Music
 
     func fetchTrendingMusic(region: ChartRegion? = nil) {
@@ -213,18 +243,25 @@ class YouTubeService: ObservableObject {
         trendingTask = Task { [weak self] in
             guard let self else { return }
             
-            // Сначала пробуем получить официальный трендовый чарт с учетом региона
+            // 1. Пробуем получить официальный трендовый чарт с фильтрацией музыки
             var results: [InvidiousSearchResult]? = nil
             for instance in self.apiInstances.shuffled().prefix(3) {
                 let urlStr = "\(instance)/api/v1/trending?type=music&region=\(currentRegion.regionCode)"
                 guard let url = URL(string: urlStr) else { continue }
-                results = await self.fetchResults(url: url)
-                if let r = results, !r.isEmpty { break }
+                if let raw = await self.fetchResults(url: url) {
+                    let filtered = raw.filter { self.isMusicTrack($0) }
+                    if !filtered.isEmpty {
+                        results = filtered
+                        break
+                    }
+                }
             }
 
-            // Если тренды пустые, ищем топовый локальный чарт
-            if results == nil || results?.isEmpty == true {
-                results = await self.searchRaw(query: currentRegion.searchQuery, page: 1)
+            // 2. Если тренды пустые или содержат мало музыки, запрашиваем отфильтрованный музыкальный чарт
+            if results == nil || (results?.count ?? 0) < 5 {
+                if let searchResults = await self.searchRaw(query: currentRegion.searchQuery, page: 1) {
+                    results = searchResults.filter { self.isMusicTrack($0) }
+                }
             }
 
             guard let items = results, !items.isEmpty else {
@@ -249,19 +286,21 @@ class YouTubeService: ObservableObject {
         }
     }
 
+
     /// Загрузка музыки по категориям (Pop, Hip-Hop, Electronic, Rock, Chill, Workout)
     func fetchCategoryMusic(genre: String) {
         DispatchQueue.main.async { self.isLoading = true }
 
         Task { [weak self] in
             guard let self else { return }
-            let query = "\(genre) Top Music Hits"
-            let results = await self.searchRaw(query: query, page: 1)
+            let query = "\(genre) Top Music Songs Hits"
+            let rawResults = await self.searchRaw(query: query, page: 1)
 
             await MainActor.run {
                 self.isLoading = false
-                guard let items = results else { return }
-                self.categoryTracks = items.map { item in
+                guard let items = rawResults else { return }
+                let filtered = items.filter { self.isMusicTrack($0) }
+                self.categoryTracks = filtered.map { item in
                     YouTubeTrack(
                         id: item.videoId,
                         title: item.title,
@@ -273,6 +312,7 @@ class YouTubeService: ObservableObject {
             }
         }
     }
+
 
     // MARK: - Обычный Поиск
 
