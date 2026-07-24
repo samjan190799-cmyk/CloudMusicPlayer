@@ -558,8 +558,9 @@ struct YouTubeView: View {
         let allCurrent = (selectedTab == 0 ? service.trendingTracks : (selectedTab == 1 ? service.categoryTracks : service.tracks))
             .map { convertToPlayerTrack($0) }
         
-        playerManager.setPlaylist(allCurrent, startWith: playerTrack)
+        playerManager.play(track: playerTrack, in: allCurrent)
     }
+
 
     private func convertToPlayerTrack(_ track: YouTubeTrack) -> PlayerTrack {
         PlayerTrack(
