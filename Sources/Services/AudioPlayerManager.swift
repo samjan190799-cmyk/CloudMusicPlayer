@@ -329,7 +329,6 @@ class AudioPlayerManager: NSObject, ObservableObject {
         }
         // 5. Запрос ссылки на ходу для Яндекса
         else if track.sourceName.contains("Яндекс") || track.sourceName == "Yandex" {
-            // Запрашиваем URL скачивания перед воспроизведением
             YandexDiskService.shared.getDownloadUrl(forPath: track.id) { [weak self] downloadUrl in
                 guard let downloadUrl = downloadUrl else {
                     DispatchQueue.main.async {
@@ -366,7 +365,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     ]
                     let asset = AVURLAsset(url: audioUrl, options: assetOptions)
                     let item = AVPlayerItem(asset: asset)
-                    item.preferredForwardBufferDuration = 5 // Мгновенный запуск после 5 сек буфера
+                    item.preferredForwardBufferDuration = 3 // Минимальная задержка предбуферизации
                     
                     DispatchQueue.main.async {
                         try? AVAudioSession.sharedInstance().setActive(true)
@@ -404,7 +403,6 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 )
             }
         } else if track.sourceName.contains("Яндекс") || track.sourceName.contains("Yandex") {
-            // Для Яндекса ищем трек в списке
             if let yandexTrack = YandexDiskService.shared.tracks.first(where: { $0.id == track.id }) {
                 CacheManager.shared.cacheTrack(
                     trackId: track.id,
@@ -415,7 +413,6 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     yandexPath: yandexTrack.path
                 )
             } else {
-                // Запасной вариант, если трек не найден в общем списке
                 CacheManager.shared.cacheTrack(
                     trackId: track.id,
                     title: track.title,
@@ -425,6 +422,15 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     yandexPath: track.id
                 )
             }
+        } else if track.sourceName.contains("YouTube") {
+            CacheManager.shared.cacheTrack(
+                trackId: track.id,
+                title: track.title,
+                source: .youtube,
+                size: 0,
+                googleFileId: nil,
+                yandexPath: nil
+            )
         }
     }
     
@@ -439,10 +445,40 @@ class AudioPlayerManager: NSObject, ObservableObject {
         
         player?.volume = volume
         player?.isMuted = isMuted
-        player?.automaticallyWaitsToMinimizeStalling = true
+        player?.automaticallyWaitsToMinimizeStalling = false // Отключаем искусственные задержки
         
-        // Наблюдатели за окончанием трека и изменением статуса
+        // Наблюдатели за окончанием трека
         NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerItemDidReachEnd),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: item
+        )
+        
+        // Наблюдение за статусом готовности элемента
+        item.publisher(for: \.status)
+            .sink { [weak self] status in
+                if status == .readyToPlay {
+                    let itemDuration = CMTimeGetSeconds(item.duration)
+                    if let trackDuration = track.duration, trackDuration > 0 {
+                        self?.duration = trackDuration
+                    } else if !itemDuration.isNaN {
+                        self?.duration = itemDuration
+                    }
+                    self?.updateNowPlayingInfo(for: track)
+                    self?.playbackState = .playing
+                    self?.player?.playImmediately(atRate: 1.0) // Моментальный запуск
+                    self?.updateSharedPlayerState()
+                    self?.endBackgroundTask()
+                } else if status == .failed {
+                    self?.playbackState = .stopped
+                    self?.endBackgroundTask()
+                    print("Ошибка воспроизведения элемента: \(String(describing: item.error))")
+                }
+            }
+            .store(in: &cancellables)
+    }
+}
             self,
             selector: #selector(playerItemDidReachEnd),
             name: .AVPlayerItemDidPlayToEndTime,
