@@ -12,19 +12,20 @@ final class DeviceMediaScanner: ObservableObject {
     @Published var isScanning = false
     
     private init() {
-        scanAllLocalSources()
+        // Сканируем только доступную папку Documents при инициализации.
+        // Доступ к Apple Music запрашиваем отложенно, чтобы избежать краша при старте приложения.
+        scanFilesAppDocuments()
     }
     
     /// Запуск сканирования всех доступных локальных источников на устройстве
     func scanAllLocalSources() {
-        DispatchQueue.main.async { self.isScanning = true }
-        
-        // 1. Сканирование приложения Файлы (Documents Folder)
-        scanFilesAppDocuments()
-        
-        // 2. Сканирование приложения Музыка (Apple Music / iPod Library)
-        requestAndScanAppleMusic()
+        DispatchQueue.main.async {
+            self.isScanning = true
+            self.scanFilesAppDocuments()
+            self.requestAndScanAppleMusic()
+        }
     }
+
     
     /// Сканирование файлов, добавленных через приложение "Файлы" (iTunes / Files Sharing)
     func scanFilesAppDocuments() {
