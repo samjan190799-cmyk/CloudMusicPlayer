@@ -477,36 +477,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 }
             }
             .store(in: &cancellables)
-    }
-}
-            self,
-            selector: #selector(playerItemDidReachEnd),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: item
-        )
-        
-        // Наблюдение за длительностью трека
-        item.publisher(for: \.status)
-            .sink { [weak self] status in
-                if status == .readyToPlay {
-                    let itemDuration = CMTimeGetSeconds(item.duration)
-                    if let trackDuration = track.duration, trackDuration > 0 {
-                        self?.duration = trackDuration
-                    } else if !itemDuration.isNaN {
-                        self?.duration = itemDuration
-                    }
-                    self?.updateNowPlayingInfo(for: track)
-                    self?.playbackState = .playing
-                    self?.player?.play()
-                    self?.updateSharedPlayerState()
-                    self?.endBackgroundTask()
-                } else if status == .failed {
-                    self?.playbackState = .stopped
-                    self?.endBackgroundTask()
-                    print("Ошибка воспроизведения элемента: \(String(describing: item.error))")
-                }
-            }
-            .store(in: &cancellables)
+
         // Обсервация текущего времени проигрывания
         removeTimeObserver()
         let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)
@@ -521,6 +492,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
         
         updateNowPlayingInfo(for: track)
     }
+
     
     private func removeTimeObserver() {
         if let token = timeObserverToken {
