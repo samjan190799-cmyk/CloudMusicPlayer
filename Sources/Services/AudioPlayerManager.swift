@@ -489,6 +489,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private func setupPlayer(with item: AVPlayerItem, track: PlayerTrack) {
         cancellables.removeAll()
         
+        item.preferredForwardBufferDuration = 5.0 // Агрессивный 5-секундный буфер для мгновенного старта
+        
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: item)
         } else {
@@ -498,6 +500,10 @@ class AudioPlayerManager: NSObject, ObservableObject {
         player?.volume = volume
         player?.isMuted = isMuted
         player?.automaticallyWaitsToMinimizeStalling = false // Отключаем искусственные задержки
+        
+        // ⚡ Фоновая предзагрузка следующего трека в очереди
+        prefetchNextTrackInQueue()
+
         
         // Наблюдатели за окончанием трека
         NotificationCenter.default.addObserver(
@@ -565,6 +571,19 @@ class AudioPlayerManager: NSObject, ObservableObject {
         let val = UserDefaults.standard.double(forKey: "playhead_\(trackId)")
         return val > 5 ? val : nil
     }
+
+    /// Предзагрузка URL следующего трека в очереди для 0.01s мгновенного переключения
+    private func prefetchNextTrackInQueue() {
+        let activePlaylist = getPlaylist()
+        let nextIndex = currentTrackIndex + 1
+        guard nextIndex >= 0 && nextIndex < activePlaylist.count else { return }
+        let nextTrack = activePlaylist[nextIndex]
+        if nextTrack.sourceName == "YouTube Music" || nextTrack.sourceName == "Аудиокниги" {
+            YouTubeService.shared.getStreamURL(for: nextTrack.id) { _ in }
+        }
+    }
+
+
 
 
     

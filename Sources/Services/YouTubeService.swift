@@ -177,33 +177,44 @@ class YouTubeService: ObservableObject {
     }
 
     private func fetchAudioFromInvidious(videoId: String) async -> URL? {
-        for instance in apiInstances.shuffled().prefix(4) {
-            let urlStr = "\(instance)/api/v1/videos/\(videoId)"
-            guard let url = URL(string: urlStr) else { continue }
-            do {
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 4
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { continue }
+        await withTaskGroup(of: URL?.self) { group -> URL? in
+            for instance in self.apiInstances.shuffled().prefix(4) {
+                group.addTask {
+                    let urlStr = "\(instance)/api/v1/videos/\(videoId)"
+                    guard let url = URL(string: urlStr) else { return nil }
+                    do {
+                        var request = URLRequest(url: url)
+                        request.timeoutInterval = 2.5
+                        let (data, response) = try await URLSession.shared.data(for: request)
+                        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
 
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let adaptiveFormats = json["adaptiveFormats"] as? [[String: Any]] {
-                    
-                    // Ищем аудиоформат container: m4a / webm
-                    for format in adaptiveFormats {
-                        if let type = format["type"] as? String, type.contains("audio"),
-                           let urlString = format["url"] as? String,
-                           let audioURL = URL(string: urlString) {
-                            return audioURL
+                        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let adaptiveFormats = json["adaptiveFormats"] as? [[String: Any]] {
+                            for format in adaptiveFormats {
+                                if let type = format["type"] as? String, type.contains("audio"),
+                                   let urlString = format["url"] as? String,
+                                   let audioURL = URL(string: urlString) {
+                                    return audioURL
+                                }
+                            }
                         }
+                    } catch {
+                        return nil
                     }
+                    return nil
                 }
-            } catch {
-                continue
             }
+            
+            for await url in group {
+                if let u = url {
+                    group.cancelAll()
+                    return u
+                }
+            }
+            return nil
         }
-        return nil
     }
+
 
     // MARK: - Валидация Музыкального Контента (Строгая Фильтрация)
 

@@ -28,7 +28,7 @@ final class DeviceMediaScanner: ObservableObject {
     
     /// Сканирование файлов, добавленных через приложение "Файлы" (iTunes / Files Sharing)
     func scanFilesAppDocuments() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             let fileManager = FileManager.default
             guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
             
@@ -62,7 +62,7 @@ final class DeviceMediaScanner: ObservableObject {
                 }
             }
             
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.filesAppTracks = foundTracks
                 self.isScanning = false
             }
@@ -87,7 +87,7 @@ final class DeviceMediaScanner: ObservableObject {
     }
     
     private func loadAppleMusicSongs() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             let query = MPMediaQuery.songs()
             guard let items = query.items else { return }
             
@@ -108,11 +108,12 @@ final class DeviceMediaScanner: ObservableObject {
                 tracks.append(track)
             }
             
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.isAppleMusicAuthorized = true
                 self.deviceTracks = tracks
                 self.isScanning = false
             }
         }
     }
+
 }
