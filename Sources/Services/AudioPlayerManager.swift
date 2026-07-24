@@ -501,9 +501,11 @@ class AudioPlayerManager: NSObject, ObservableObject {
         player?.volume = volume
         player?.isMuted = isMuted
         player?.automaticallyWaitsToMinimizeStalling = false // Отключаем искусственные задержки
+        player?.play() // Мгновенный запуск забора чанков с сети
         
         // ⚡ Фоновая предзагрузка следующего трека в очереди
         prefetchNextTrackInQueue()
+
 
         
         // Наблюдатели за окончанием трека

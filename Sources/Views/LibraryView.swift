@@ -79,6 +79,9 @@ struct LibraryView: View {
                                 // Раздел "На устройстве" (Apple Music + Файлы)
                                 deviceTracksSection
                             } else if selectedSection == 2 {
+                                // Раздел "Аудиокниги"
+                                AudiobooksView()
+                            } else if selectedSection == 3 {
                                 // Раздел "Плейлисты"
                                 playlistsSection
                             } else {
@@ -175,8 +178,9 @@ struct LibraryView: View {
             HStack(spacing: 6) {
                 sectionPickerButton(title: "Загрузки", index: 0)
                 sectionPickerButton(title: "На устройстве", index: 1)
-                sectionPickerButton(title: "Плейлисты", index: 2)
-                sectionPickerButton(title: "Избранное", index: 3)
+                sectionPickerButton(title: "Аудиокниги", index: 2)
+                sectionPickerButton(title: "Плейлисты", index: 3)
+                sectionPickerButton(title: "Избранное", index: 4)
             }
             .padding(4)
         }

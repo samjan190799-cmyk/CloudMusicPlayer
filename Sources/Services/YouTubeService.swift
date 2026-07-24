@@ -177,14 +177,72 @@ class YouTubeService: ObservableObject {
     }
 
     private func fetchAudioFromInvidious(videoId: String) async -> URL? {
-        await withTaskGroup(of: URL?.self) { group -> URL? in
+        // 1. Попытка через Piped API
+        let pipedInstances = [
+            "https://pipedapi.kavin.rocks",
+            "https://api.piped.yt",
+            "https://pipedapi.astral.cool",
+            "https://pipedapi.drgns.space"
+        ]
+        
+        let pipedResult: URL? = await withTaskGroup(of: URL?.self) { group -> URL? in
+            for instance in pipedInstances {
+                group.addTask {
+                    let urlStr = "\(instance)/streams/\(videoId)"
+                    guard let url = URL(string: urlStr) else { return nil }
+                    do {
+                        var request = URLRequest(url: url)
+                        request.timeoutInterval = 2.0
+                        let (data, response) = try await URLSession.shared.data(for: request)
+                        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+                        
+                        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let audioStreams = json["audioStreams"] as? [[String: Any]] {
+                            for stream in audioStreams {
+                                if let urlString = stream["url"] as? String, let audioURL = URL(string: urlString) {
+                                    return audioURL
+                                }
+                            }
+                        }
+                    } catch {
+                        return nil
+                    }
+                    return nil
+                }
+            }
+            for await url in group {
+                if let u = url {
+                    group.cancelAll()
+                    return u
+                }
+            }
+            return nil
+        }
+        
+        if let pipedResult = pipedResult {
+            return pipedResult
+        }
+        
+        // 2. Вторичная попытка через Invidious API и прямого аудио-прокси (/latest_version?id=...&itag=140)
+        return await withTaskGroup(of: URL?.self) { group -> URL? in
             for instance in self.apiInstances.shuffled().prefix(4) {
                 group.addTask {
+                    let proxyStr = "\(instance)/latest_version?id=\(videoId)&itag=140"
+                    if let proxyURL = URL(string: proxyStr) {
+                        var headReq = URLRequest(url: proxyURL)
+                        headReq.httpMethod = "HEAD"
+                        headReq.timeoutInterval = 1.8
+                        if let (_, resp) = try? await URLSession.shared.data(for: headReq),
+                           let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 200 || httpResp.statusCode == 302 {
+                            return proxyURL
+                        }
+                    }
+                    
                     let urlStr = "\(instance)/api/v1/videos/\(videoId)"
                     guard let url = URL(string: urlStr) else { return nil }
                     do {
                         var request = URLRequest(url: url)
-                        request.timeoutInterval = 2.5
+                        request.timeoutInterval = 2.0
                         let (data, response) = try await URLSession.shared.data(for: request)
                         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
 
@@ -214,6 +272,7 @@ class YouTubeService: ObservableObject {
             return nil
         }
     }
+
 
 
     // MARK: - Валидация Музыкального Контента (Строгая Фильтрация)
