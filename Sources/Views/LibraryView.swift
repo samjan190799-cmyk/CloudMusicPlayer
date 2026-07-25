@@ -478,4 +478,3 @@ private struct LocalTrackRowView: View {
         .buttonStyle(SpringScaleButtonStyle())
     }
 }
-}

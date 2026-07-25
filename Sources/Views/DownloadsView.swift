@@ -350,6 +350,72 @@ struct DownloadsView: View {
             }
         )
     }
+    
+    // MARK: - Пустое Состояние (Empty State)
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 54))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.purple, .cyan],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            
+            Text("Нет скачанной музыки")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            
+            Text("Перейдите в раздел «Облако» или «YouTube», чтобы скачать ваши аудиофайлы для оффлайн-прослушивания.")
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity)
+        .background(
+            ZStack {
+                VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.6)
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Вспомогательные методы
+    
+    private func playLocalTrack(_ track: LocalTrack) {
+        let allPlayerTracks = filteredTracks.map {
+            PlayerTrack(
+                id: $0.id,
+                title: $0.title,
+                artist: $0.artist ?? "Скачанный трек",
+                sourceName: "Загрузки",
+                localURL: $0.localURL,
+                remoteURL: nil,
+                googleFileId: nil
+            )
+        }
+        if let target = allPlayerTracks.first(where: { $0.id == track.id }) {
+            playerManager.play(track: target, in: allPlayerTracks)
+        }
+    }
+    
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
 }
 
 // MARK: - Отдельный компонент строки скачанного трека (для мгновенной компиляции Swift)
@@ -441,72 +507,5 @@ private struct DownloadedTrackRowView: View {
             .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(SpringScaleButtonStyle())
-    }
-}
-    
-    // MARK: - Пустое Состояние (Empty State)
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.system(size: 54))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.purple, .cyan],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            
-            Text("Нет скачанной музыки")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-            
-            Text("Перейдите в раздел «Облако» или «YouTube», чтобы скачать ваши аудиофайлы для оффлайн-прослушивания.")
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.5))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity)
-        .background(
-            ZStack {
-                VisualEffectBlur(material: .systemUltraThinMaterialDark)
-                Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.6)
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
-        .padding(.horizontal, 24)
-    }
-    
-    // MARK: - Вспомогательные методы
-    
-    private func playLocalTrack(_ track: LocalTrack) {
-        let allPlayerTracks = filteredTracks.map {
-            PlayerTrack(
-                id: $0.id,
-                title: $0.title,
-                artist: $0.artist ?? "Скачанный трек",
-                sourceName: "Загрузки",
-                localURL: $0.localURL,
-                remoteURL: nil,
-                googleFileId: nil
-            )
-        }
-        if let target = allPlayerTracks.first(where: { $0.id == track.id }) {
-            playerManager.play(track: target, in: allPlayerTracks)
-        }
-    }
-    
-    private func formatBytes(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB, .useGB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
     }
 }
