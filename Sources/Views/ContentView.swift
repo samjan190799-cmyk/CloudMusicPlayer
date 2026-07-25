@@ -44,11 +44,12 @@ struct ContentView: View {
             .padding(.bottom, 90)
             .ignoresSafeArea(edges: .top)
             
-            // Парящий мини-плеер справа снизу + плавающий стеклянный TabBar внизу
-            VStack(alignment: .trailing, spacing: 14) {
-                // Плавающий стеклянный виджет плеера справа снизу (как на референсном изображении)
-                floatingMiniPlayerWidget
-                    .padding(.trailing, 8)
+            // Полноценный стеклянный Мини-плеер + плавающий стеклянный TabBar внизу
+            VStack(spacing: 8) {
+                if playerManager.currentTrack != nil {
+                    MiniPlayerView(isPlayerExpanded: $isPlayerExpanded)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 
                 // Кастомный парящий стеклянный TabBar (Liquid Glass)
                 customTabBar
@@ -61,57 +62,6 @@ struct ContentView: View {
             PlayerDetailView(isPlayerExpanded: $isPlayerExpanded)
         }
         .preferredColorScheme(.dark)
-    }
-    
-    // MARK: - Плавающий мини-плеер справа снизу (как на изображении)
-    
-    private var floatingMiniPlayerWidget: some View {
-        Button(action: {
-            HapticManager.shared.triggerImpact(style: .medium)
-            isPlayerExpanded = true
-        }) {
-            VStack(spacing: 8) {
-                HStack(spacing: 12) {
-                    Button(action: {
-                        HapticManager.shared.triggerSelection()
-                        playerManager.togglePlayPause()
-                    }) {
-                        Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    
-                    Button(action: {
-                        HapticManager.shared.triggerSelection()
-                        playerManager.nextTrack()
-                    }) {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white.opacity(0.9))
-                    }
-                }
-                
-                Text(playerManager.currentTrack?.title ?? "Shivers")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
-                    Color(red: 0.08, green: 0.08, blue: 0.18).opacity(0.85)
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.4), radius: 14, x: 0, y: 6)
-        }
-        .buttonStyle(SpringScaleButtonStyle())
     }
     
     // MARK: - Кастомный стеклянный TabBar (Liquid Glass)

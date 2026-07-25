@@ -210,79 +210,7 @@ struct LibraryView: View {
     }
     
     private func realPlaylistCard(playlist: Playlist) -> some View {
-        ZStack(alignment: .bottom) {
-            // Градиентный фон карточки
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.25, green: 0.1, blue: 0.5),
-                        Color(red: 0.08, green: 0.2, blue: 0.55),
-                        Color(red: 0.05, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                Image(systemName: "music.quaver.at.rectangle.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.white.opacity(0.15))
-            }
-            .frame(width: 210, height: 240)
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            
-            // Нижняя плавающая матовая стеклянная плашка
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(playlist.name)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    
-                    Text("\(playlist.tracks.count) треков")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                
-                Spacer()
-                
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                        .offset(x: 1)
-                }
-                .frame(width: 36, height: 36)
-            }
-            .padding(14)
-            .frame(width: 210)
-            .background(
-                ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
-                    Color(red: 0.12, green: 0.12, blue: 0.28).opacity(0.7)
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-        }
-        .frame(width: 210, height: 240)
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.3), radius: 14, x: 0, y: 7)
+        LibraryPlaylistCardView(playlist: playlist)
     }
     
     // MARK: - Секция Скачанных Треков (Реальные данные)
@@ -479,5 +407,96 @@ private struct LocalTrackRowView: View {
             .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(SpringScaleButtonStyle())
+    }
+}
+
+// MARK: - Отдельный компонент карточки плейлиста в Медиатеке
+
+private struct LibraryPlaylistCardView: View {
+    let playlist: Playlist
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // Градиентный фон или кастомное фото плейлиста
+            ZStack {
+                if let coverURL = playlist.coverURL,
+                   let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 210, height: 240)
+                        .clipped()
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.25, green: 0.1, blue: 0.5),
+                            Color(red: 0.08, green: 0.2, blue: 0.55),
+                            Color(red: 0.05, green: 0.05, blue: 0.2)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    
+                    Image(systemName: playlist.id == PlaylistManager.favoritesUUID ? "heart.fill" : "music.quaver.at.rectangle.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.white.opacity(0.18))
+                }
+            }
+            .frame(width: 210, height: 240)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            
+            // Нижняя плавающая матовая стеклянная плашка
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playlist.name)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text("\(playlist.tracks.count) треков")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Spacer()
+                
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                        .offset(x: 1)
+                }
+                .frame(width: 36, height: 36)
+            }
+            .padding(14)
+            .frame(width: 210)
+            .background(
+                ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                    Color(red: 0.12, green: 0.12, blue: 0.28).opacity(0.7)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+        }
+        .frame(width: 210, height: 240)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 14, x: 0, y: 7)
     }
 }

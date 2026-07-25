@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Модель трека внутри плейлиста
 struct PlaylistTrack: Identifiable, Codable, Equatable {
@@ -40,6 +41,13 @@ struct Playlist: Identifiable, Codable, Equatable {
     var name: String
     var tracks: [PlaylistTrack]
     let createdAt: Date
+    var coverPath: String? = nil // Путь к обложке плейлиста
+    
+    var coverURL: URL? {
+        guard let coverPath = coverPath else { return nil }
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsDirectory.appendingPathComponent(coverPath)
+    }
     
     static func == (lhs: Playlist, rhs: Playlist) -> Bool {
         return lhs.id == rhs.id
@@ -104,6 +112,27 @@ class PlaylistManager: ObservableObject {
         savePlaylists()
     }
     
+    /// Установка кастомного фото/обложки для плейлиста
+    func setCoverImage(_ image: UIImage, for playlistId: UUID) {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistId }) else { return }
+        
+        let fileManager = FileManager.default
+        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let folderURL = documentsURL.appendingPathComponent("PlaylistCovers", isDirectory: true)
+        
+        try? fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        
+        let filename = "playlist_cover_\(playlistId.uuidString).jpg"
+        let fileURL = folderURL.appendingPathComponent(filename)
+        let relativePath = "PlaylistCovers/\(filename)"
+        
+        if let data = image.jpegData(compressionQuality: 0.85) {
+            try? data.write(to: fileURL)
+            playlists[index].coverPath = relativePath
+            savePlaylists()
+        }
+    }
+    
     /// Удаление плейлиста
     func deletePlaylist(id: UUID) {
         guard id != PlaylistManager.favoritesUUID else { return } // Нельзя удалить Избранное
@@ -114,7 +143,6 @@ class PlaylistManager: ObservableObject {
     /// Добавление трека в плейлист
     func addTrack(_ track: PlaylistTrack, to playlistId: UUID) {
         guard let index = playlists.firstIndex(where: { $0.id == playlistId }) else { return }
-        // Избегаем дубликатов по ID в рамках одного плейлиста
         if !playlists[index].tracks.contains(where: { $0.id == track.id }) {
             playlists[index].tracks.append(track)
             savePlaylists()
@@ -143,7 +171,7 @@ class PlaylistManager: ObservableObject {
                 tracks: [],
                 createdAt: Date()
             )
-            playlists.insert(favorites, at: 0) // Всегда первый в списке
+            playlists.insert(favorites, at: 0)
             savePlaylists()
         }
     }
