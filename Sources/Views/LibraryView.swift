@@ -370,7 +370,10 @@ struct LibraryView: View {
                     id: track.id,
                     title: track.title,
                     artist: track.artist ?? "Неизвестный исполнитель",
-                    localPath: track.localURL.path
+                    sourceName: "Медиатека",
+                    localRelativePath: track.relativePath,
+                    remoteURLString: nil,
+                    googleFileId: nil
                 )
             }
         )

@@ -340,7 +340,10 @@ struct DownloadsView: View {
                     id: track.id,
                     title: track.title,
                     artist: track.artist ?? "Скачанный трек",
-                    localPath: track.localURL.path
+                    sourceName: "Загрузки",
+                    localRelativePath: track.relativePath,
+                    remoteURLString: nil,
+                    googleFileId: nil
                 )
             },
             onDelete: {
