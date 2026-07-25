@@ -167,14 +167,6 @@ struct CloudView: View {
                             }
                             Spacer()
                         } else {
-                            // Список треков
-                            List {
-                                if source == .google {
-                                    ForEach(googleTracks) { track in
-                                        trackRow(id: track.id, title: track.name, size: track.sizeInBytes, sourceTrack: .google(track))
-                                    }
-                                } else {
-                                    ForEach(yandexTracks) { track in
                             // Поиск
                             HStack {
                                 Image(systemName: "magnifyingglass")
