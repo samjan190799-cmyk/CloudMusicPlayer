@@ -56,194 +56,14 @@ struct CloudView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Фон
-                LinearGradient(
-                    colors: [Color(red: 0.05, green: 0.08, blue: 0.16), Color(red: 0.09, green: 0.06, blue: 0.15)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                Group {
-                    if source == .telegram {
-                        TelegramCloudView()
-                    } else {
-                        VStack {
-                        if !isAuthenticated {
-                        // Заглушка неавторизованного состояния
-                        Spacer()
-                        VStack(spacing: 20) {
-                            Image(systemName: source == .google ? "logo.googledrive" : "y.circle.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(.purple.opacity(0.8))
-                            
-                            Text("Подключите \(title)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                            
-                            Text("Авторизуйтесь в настройках, чтобы получить доступ к аудиофайлам на вашем \(title) и слушать их онлайн.")
-                                .font(.system(size: 14))
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 40)
-                            
-                            Button(action: {
-                                withAnimation {
-                                    selectedTab = 4 // Настройки (пятый таб)
-                                }
-                            }) {
-                                Text("Перейти в настройки")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 12)
-                                    .background(LinearGradient(
-                                        colors: [.purple, .blue],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ))
-                                    .cornerRadius(12)
-                                    .shadow(color: .purple.opacity(0.4), radius: 8, x: 0, y: 4)
-                            }
-                        }
-                        .padding(24)
-                        .background(Color.white.opacity(0.04))
-                        .cornerRadius(20)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                        .padding(20)
-                        Spacer()
-                    } else {
-                        // Поиск
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
-                            TextField("Поиск музыки на диске...", text: $searchText)
-                                .foregroundColor(.white)
-                        }
-                        .padding(12)
-                        .background(Color.white.opacity(0.06))
-                        .cornerRadius(10)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 10)
-                        
-                        if isLoading {
-                            Spacer()
-                            ProgressView("Загрузка списка файлов...")
-                                .foregroundColor(.white)
-                            Spacer()
-                        } else if let error = errorMessage {
-                            Spacer()
-                            VStack(spacing: 16) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.title)
-                                    .foregroundColor(.red)
-                                Text(error)
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 20)
-                                Button("Повторить попытку") {
-                                    refreshFiles()
-                                }
-                                .foregroundColor(.cyan)
-                            }
-                            Spacer()
-                        } else if (source == .google ? googleTracks.isEmpty : yandexTracks.isEmpty) {
-                            Spacer()
-                            VStack(spacing: 16) {
-                                Image(systemName: "music.note.list")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.gray.opacity(0.6))
-                                Text("На диске нет аудиофайлов")
-                                    .font(.title3)
-                                    .foregroundColor(.white)
-                                Text("Загрузите файлы форматов .mp3 или других аудио на ваш диск.")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.gray)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 40)
-                            }
-                            Spacer()
-                        } else {
-                            // Поиск
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.gray)
-                                TextField("Поиск музыки на диске...", text: $searchText)
-                                    .foregroundColor(.white)
-                            }
-                            .padding(12)
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(10)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 10)
-                            
-                            if isLoading {
-                                Spacer()
-                                ProgressView("Загрузка списка файлов...")
-                                    .foregroundColor(.white)
-                                Spacer()
-                            } else if let error = errorMessage {
-                                Spacer()
-                                VStack(spacing: 16) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.title)
-                                        .foregroundColor(.red)
-                                    Text(error)
-                                        .foregroundColor(.white)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 20)
-                                    Button("Повторить попытку") {
-                                        refreshFiles()
-                                    }
-                                    .foregroundColor(.cyan)
-                                }
-                                Spacer()
-                            } else if (source == .google ? googleTracks.isEmpty : yandexTracks.isEmpty) {
-                                Spacer()
-                                VStack(spacing: 16) {
-                                    Image(systemName: "music.note.list")
-                                        .font(.system(size: 60))
-                                        .foregroundColor(.gray.opacity(0.6))
-                                    Text("На диске нет аудиофайлов")
-                                        .font(.title3)
-                                        .foregroundColor(.white)
-                                    Text("Загрузите файлы форматов .mp3 или других аудио на ваш диск.")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.gray)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 40)
-                                }
-                                Spacer()
-                            } else {
-                                // Список треков
-                                List {
-                                    if source == .google {
-                                        ForEach(googleTracks) { track in
-                                            trackRow(id: track.id, title: track.name, size: track.sizeInBytes, sourceTrack: .google(track))
-                                        }
-                                    } else {
-                                        ForEach(yandexTracks) { track in
-                                            trackRow(id: track.id, title: track.name, size: track.size ?? 0, sourceTrack: .yandex(track))
-                                        }
-                                    }
-                                }
-                                .listStyle(PlainListStyle())
-                            }
-                        }
-                    }
-                }
+                backgroundGradient
+                mainContent
             }
             .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if isAuthenticated && !isLoading {
-                        Button(action: {
-                            refreshFiles()
-                        }) {
+                        Button(action: { refreshFiles() }) {
                             Image(systemName: "arrow.clockwise")
                                 .foregroundColor(.white)
                         }
@@ -261,8 +81,145 @@ struct CloudView: View {
             AddToPlaylistView(track: track)
         }
     }
-}
-}
+
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [Color(red: 0.05, green: 0.08, blue: 0.16), Color(red: 0.09, green: 0.06, blue: 0.15)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if source == .telegram {
+            TelegramCloudView()
+        } else if !isAuthenticated {
+            unauthenticatedView
+        } else {
+            driveContentView
+        }
+    }
+
+    private var unauthenticatedView: some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 20) {
+                Image(systemName: source == .google ? "logo.googledrive" : "y.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(.purple.opacity(0.8))
+                
+                Text("Подключите \(title)")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text("Авторизуйтесь в настройках, чтобы получить доступ к аудиофайлам на вашем \(title) и слушать их онлайн.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                
+                Button(action: {
+                    withAnimation {
+                        selectedTab = 4 // Настройки (пятый таб)
+                    }
+                }) {
+                    Text("Перейти в настройки")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ))
+                        .cornerRadius(12)
+                        .shadow(color: .purple.opacity(0.4), radius: 8, x: 0, y: 4)
+                }
+            }
+            .padding(24)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .padding(20)
+            Spacer()
+        }
+    }
+
+    private var driveContentView: some View {
+        VStack {
+            // Поиск
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.gray)
+                TextField("Поиск музыки на диске...", text: $searchText)
+                    .foregroundColor(.white)
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(10)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            
+            if isLoading {
+                Spacer()
+                ProgressView("Загрузка списка файлов...")
+                    .foregroundColor(.white)
+                Spacer()
+            } else if let error = errorMessage {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title)
+                        .foregroundColor(.red)
+                    Text(error)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    Button("Повторить попытку") {
+                        refreshFiles()
+                    }
+                    .foregroundColor(.cyan)
+                }
+                Spacer()
+            } else if (source == .google ? googleTracks.isEmpty : yandexTracks.isEmpty) {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "music.note.list")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray.opacity(0.6))
+                    Text("На диске нет аудиофайлов")
+                        .font(.title3)
+                        .foregroundColor(.white)
+                    Text("Загрузите файлы форматов .mp3 или других аудио на ваш диск.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                Spacer()
+            } else {
+                List {
+                    if source == .google {
+                        ForEach(googleTracks) { track in
+                            trackRow(id: track.id, title: track.name, size: track.sizeInBytes, sourceTrack: .google(track))
+                        }
+                    } else {
+                        ForEach(yandexTracks) { track in
+                            trackRow(id: track.id, title: track.name, size: track.size ?? 0, sourceTrack: .yandex(track))
+                        }
+                    }
+                }
+                .listStyle(PlainListStyle())
+            }
+        }
+    }
     
     /// Ряд трека
     private func trackRow(id: String, title: String, size: Int64, sourceTrack: TrackEnum) -> some View {
