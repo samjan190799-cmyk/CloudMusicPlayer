@@ -348,7 +348,7 @@ struct DownloadsView: View {
             },
             onDelete: {
                 withAnimation {
-                    downloadManager.deleteTrack(track)
+                    downloadManager.deleteTrack(trackId: track.id)
                 }
             }
         )
