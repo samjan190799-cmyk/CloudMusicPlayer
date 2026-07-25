@@ -29,7 +29,7 @@ struct YouTubeThumbnail: View {
                     .clipped()
                     .transition(.opacity.animation(.easeIn(duration: 0.2)))
             } else if isLoading {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(Color.white.opacity(0.06))
                     .frame(width: width, height: height)
                     .overlay(
@@ -37,7 +37,7 @@ struct YouTubeThumbnail: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
                     )
             } else {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(AppTheme.accentGradient)
                     .frame(width: width, height: height)
                     .overlay(
@@ -48,7 +48,7 @@ struct YouTubeThumbnail: View {
             }
         }
         .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .task(id: videoId) {
             await loadWithFallback(urlChain: urlChain)
         }
@@ -122,7 +122,7 @@ struct YouTubeView: View {
     @ObservedObject var playlistManager = PlaylistManager.shared
 
     @State private var searchQuery = ""
-    @State private var selectedTab = 0 // 0 = Чарты, 1 = Жанры, 2 = Подкасты, 3 = Аудиокниги, 4 = Поиск
+    @State private var selectedTab = 0 // 0 = Чарты, 1 = Жанры, 2 = Подкасты, 3 = Поиск
     @State private var selectedGenre = "Pop"
     @State private var selectedPodcastCategory = "Популярные"
     @State private var selectedAudiobookCategory = "Бестселлеры"
@@ -136,14 +136,6 @@ struct YouTubeView: View {
         ("💼 Бизнес & Финансы", "Бизнес")
     ]
 
-    private let audiobookCategories = [
-        ("⭐ Бестселлеры", "Бестселлеры"),
-        ("🚀 Фантастика & Фэнтези", "Фантастика"),
-        ("🔍 Детективы & Триллеры", "Детективы"),
-        ("📖 Классика", "Классика"),
-        ("💡 Саморазвитие", "Саморазвитие")
-    ]
-
     private let genres = [
         ("🔥 Поп", "Pop"),
         ("🎤 Хип-Хоп", "Hip-Hop"),
@@ -154,43 +146,38 @@ struct YouTubeView: View {
     ]
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Динамический фон
-                AmbientBackgroundView(accentColor: AppTheme.neonPink, secondaryColor: AppTheme.neonCyan)
+        ZStack {
+            // Эмбиент-фон 2026
+            AmbientBackgroundView(accentColor: Color.red, secondaryColor: AppTheme.neonCyan)
 
-                VStack(spacing: 0) {
-                    // Верхний Хедер & Поисковая строка
-                    headerView
-                    
-                    // Переключатель секций (Liquid Glass)
-                    sectionPickerView
-                    
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            if selectedTab == 0 {
-                                trendingSection
-                            } else if selectedTab == 1 {
-                                categoriesSection
-                            } else if selectedTab == 2 {
-                                podcastsSection
-                            } else {
-                                searchResultsSection
-                            }
+            VStack(spacing: 0) {
+                // Верхняя панель & Поиск
+                headerView
+                
+                // Переключатель разедлов в стиле Liquid Glass
+                sectionPickerView
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if selectedTab == 0 {
+                            trendingSection
+                        } else if selectedTab == 1 {
+                            categoriesSection
+                        } else if selectedTab == 2 {
+                            podcastsSection
+                        } else {
+                            searchResultsSection
                         }
-                        .padding(.bottom, 30)
                     }
-
+                    .padding(.bottom, 30)
                 }
             }
-            .navigationBarHidden(true)
-            .sheet(item: $selectedTrackForPlaylist) { track in
-                AddToPlaylistView(track: track)
-            }
+        }
+        .sheet(item: $selectedTrackForPlaylist) { track in
+            AddToPlaylistView(track: track)
         }
         .preferredColorScheme(.dark)
     }
-
 
     // MARK: - Хедер и Поисковая панель
 
@@ -199,10 +186,10 @@ struct YouTubeView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("YouTube Music")
-                        .font(.system(size: 32, weight: .bold))
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     
-                    Text("Тренды, чарты и быстрый поиск")
+                    Text("Тренды, чарты и моментальный поиск")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(AppTheme.textMuted)
                 }
@@ -211,12 +198,12 @@ struct YouTubeView: View {
                 
                 ZStack {
                     Circle()
-                        .fill(Color.red.opacity(0.18))
-                        .frame(width: 44, height: 44)
+                        .fill(Color.red.opacity(0.2))
+                        .frame(width: 48, height: 48)
                         .blur(radius: 6)
                     
                     Image(systemName: "play.rectangle.fill")
-                        .font(.system(size: 24))
+                        .font(.system(size: 26, weight: .bold))
                         .foregroundColor(.red)
                         .shadow(color: .red.opacity(0.6), radius: 8)
                 }
@@ -228,7 +215,7 @@ struct YouTubeView: View {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(AppTheme.neonCyan)
+                    .foregroundColor(.red)
 
                 TextField("Исполнитель, трек, альбом...", text: $searchQuery)
                     .foregroundColor(.white)
@@ -275,8 +262,6 @@ struct YouTubeView: View {
         .padding(.bottom, 14)
     }
 
-
-
     private func tabPickerButton(title: String, index: Int) -> some View {
         let isSelected = selectedTab == index
         
@@ -289,12 +274,12 @@ struct YouTubeView: View {
             Text(title)
                 .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                 .foregroundColor(isSelected ? .white : AppTheme.textMuted)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
                     Group {
                         if isSelected {
-                            LinearGradient(colors: [Color.red.opacity(0.8), AppTheme.neonPurple.opacity(0.6)], startPoint: .leading, endPoint: .trailing)
+                            LinearGradient(colors: [Color.red.opacity(0.85), AppTheme.neonPurple.opacity(0.6)], startPoint: .leading, endPoint: .trailing)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .neonGlow(color: .red, radius: 6, opacity: 0.4)
                         } else {
@@ -312,17 +297,17 @@ struct YouTubeView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Музыкальные Чарты")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 Spacer()
                 if service.isTrendingLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
                 }
             }
             .padding(.horizontal, 20)
 
-            // Переключатель Региональных Чартов (Россия & СНГ, Global, USA, TikTok)
+            // Переключатель Региональных Чартов
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(ChartRegion.allCases) { region in
@@ -339,9 +324,9 @@ struct YouTubeView: View {
                                 .background(
                                     Group {
                                         if isSelected {
-                                            AppTheme.primaryGradient
+                                            LinearGradient(colors: [Color.red, Color.purple], startPoint: .leading, endPoint: .trailing)
                                                 .clipShape(Capsule())
-                                                .neonGlow(color: AppTheme.neonCyan, radius: 6, opacity: 0.4)
+                                                .neonGlow(color: .red, radius: 6, opacity: 0.4)
                                         } else {
                                             Capsule()
                                                 .fill(Color.white.opacity(0.06))
@@ -349,17 +334,23 @@ struct YouTubeView: View {
                                     }
                                 )
                         }
+                        .buttonStyle(SpringScaleButtonStyle())
                     }
                 }
                 .padding(.horizontal, 20)
             }
 
-
             // Горизонтальная карусель Чартов
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
                     ForEach(service.trendingTracks.prefix(10)) { track in
-                        chartCardView(for: track)
+                        YouTubeChartCardView(
+                            track: track,
+                            isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                            onPlay: {
+                                playTrack(track)
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -368,55 +359,27 @@ struct YouTubeView: View {
             // Вертикальный список остальных трендовых композиций
             VStack(spacing: 10) {
                 ForEach(service.trendingTracks.dropFirst(10)) { track in
-                    trackRowView(for: track)
+                    YouTubeTrackRowView(
+                        track: track,
+                        isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                        isDownloaded: downloadManager.isDownloaded(trackId: track.id),
+                        onPlay: {
+                            playTrack(track)
+                        },
+                        onDownload: {
+                            HapticManager.shared.triggerImpact(style: .medium)
+                            if !downloadManager.isDownloaded(trackId: track.id) {
+                                downloadManager.downloadYouTubeTrack(track)
+                            }
+                        },
+                        onAddToPlaylist: {
+                            HapticManager.shared.triggerImpact(style: .light)
+                            selectedTrackForPlaylist = convertToPlayerTrack(track).toPlaylistTrack()
+                        }
+                    )
                 }
             }
             .padding(.horizontal, 20)
-        }
-    }
-
-    private func chartCardView(for track: YouTubeTrack) -> some View {
-        let playerTrack = convertToPlayerTrack(track)
-        let isPlayingThis = playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing
-
-        return VStack(alignment: .leading, spacing: 10) {
-            ZStack(alignment: .bottomTrailing) {
-                YouTubeThumbnail(videoId: track.id, width: 150, height: 150)
-
-                Button(action: {
-                    HapticManager.shared.triggerImpact(style: .medium)
-                    playTrack(track)
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.black.opacity(0.7))
-                            .frame(width: 38, height: 38)
-                        
-                        Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(AppTheme.neonCyan)
-                    }
-                    .padding(8)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(track.title)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(track.uploader)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(AppTheme.textMuted)
-                    .lineLimit(1)
-            }
-            .frame(width: 150, alignment: .leading)
-        }
-        .padding(10)
-        .liquidGlass(cornerRadius: 18, opacity: 0.35)
-        .onTapGesture {
-            playTrack(track)
         }
     }
 
@@ -425,7 +388,7 @@ struct YouTubeView: View {
     private var categoriesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Популярные Жанры")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .padding(.horizontal, 20)
 
@@ -447,9 +410,9 @@ struct YouTubeView: View {
                                 .background(
                                     Group {
                                         if isSelected {
-                                            AppTheme.primaryGradient
+                                            LinearGradient(colors: [Color.red, AppTheme.neonPurple], startPoint: .leading, endPoint: .trailing)
                                                 .clipShape(Capsule())
-                                                .neonGlow(color: AppTheme.neonCyan, radius: 6, opacity: 0.4)
+                                                .neonGlow(color: .red, radius: 6, opacity: 0.4)
                                         } else {
                                             Capsule()
                                                 .fill(Color.white.opacity(0.06))
@@ -457,6 +420,7 @@ struct YouTubeView: View {
                                     }
                                 )
                         }
+                        .buttonStyle(SpringScaleButtonStyle())
                     }
                 }
                 .padding(.horizontal, 20)
@@ -467,14 +431,31 @@ struct YouTubeView: View {
                 HStack {
                     Spacer()
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
                     Spacer()
                 }
                 .padding(.vertical, 40)
             } else {
                 VStack(spacing: 10) {
                     ForEach(service.categoryTracks) { track in
-                        trackRowView(for: track)
+                        YouTubeTrackRowView(
+                            track: track,
+                            isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                            isDownloaded: downloadManager.isDownloaded(trackId: track.id),
+                            onPlay: {
+                                playTrack(track)
+                            },
+                            onDownload: {
+                                HapticManager.shared.triggerImpact(style: .medium)
+                                if !downloadManager.isDownloaded(trackId: track.id) {
+                                    downloadManager.downloadYouTubeTrack(track)
+                                }
+                            },
+                            onAddToPlaylist: {
+                                HapticManager.shared.triggerImpact(style: .light)
+                                selectedTrackForPlaylist = convertToPlayerTrack(track).toPlaylistTrack()
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -484,11 +465,10 @@ struct YouTubeView: View {
 
     // MARK: - Секция 3: Подкасты
 
-
     private var podcastsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("🎙 Подкасты")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .padding(.horizontal, 20)
 
@@ -509,7 +489,7 @@ struct YouTubeView: View {
                                 .background(
                                     Group {
                                         if isSelected {
-                                            AppTheme.accentGradient
+                                            LinearGradient(colors: [AppTheme.neonPurple, Color.cyan], startPoint: .leading, endPoint: .trailing)
                                                 .clipShape(Capsule())
                                                 .neonGlow(color: AppTheme.neonPurple, radius: 6, opacity: 0.4)
                                         } else {
@@ -519,6 +499,7 @@ struct YouTubeView: View {
                                     }
                                 )
                         }
+                        .buttonStyle(SpringScaleButtonStyle())
                     }
                 }
                 .padding(.horizontal, 20)
@@ -537,8 +518,8 @@ struct YouTubeView: View {
                     Image(systemName: "mic.slash")
                         .font(.system(size: 36))
                         .foregroundColor(AppTheme.textMuted)
-                    Text("Нажмите на категорию подкастов для выгрузки")
-                        .font(.system(size: 13))
+                    Text("Нажмите на категорию подкастов для загрузки")
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(AppTheme.textMuted)
                 }
                 .frame(maxWidth: .infinity)
@@ -546,7 +527,24 @@ struct YouTubeView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(service.podcastTracks) { track in
-                        trackRowView(for: track)
+                        YouTubeTrackRowView(
+                            track: track,
+                            isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                            isDownloaded: downloadManager.isDownloaded(trackId: track.id),
+                            onPlay: {
+                                playTrack(track)
+                            },
+                            onDownload: {
+                                HapticManager.shared.triggerImpact(style: .medium)
+                                if !downloadManager.isDownloaded(trackId: track.id) {
+                                    downloadManager.downloadYouTubeTrack(track)
+                                }
+                            },
+                            onAddToPlaylist: {
+                                HapticManager.shared.triggerImpact(style: .light)
+                                selectedTrackForPlaylist = convertToPlayerTrack(track).toPlaylistTrack()
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -559,89 +557,12 @@ struct YouTubeView: View {
         }
     }
 
-    // MARK: - Секция 4: Аудиокниги
-
-    private var audiobooksSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("📚 Аудиокниги")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(audiobookCategories, id: \.1) { name, key in
-                        let isSelected = selectedAudiobookCategory == key
-                        Button(action: {
-                            selectedAudiobookCategory = key
-                            HapticManager.shared.triggerSelection()
-                            service.fetchAudiobooks(category: key)
-                        }) {
-                            Text(name)
-                                .font(.system(size: 13, weight: isSelected ? .bold : .medium))
-                                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Group {
-                                        if isSelected {
-                                            AppTheme.primaryGradient
-                                                .clipShape(Capsule())
-                                                .neonGlow(color: AppTheme.neonCyan, radius: 6, opacity: 0.4)
-                                        } else {
-                                            Capsule()
-                                                .fill(Color.white.opacity(0.06))
-                                        }
-                                    }
-                                )
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-
-            if service.isLoading {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
-                    Spacer()
-                }
-                .padding(.vertical, 40)
-            } else if service.audiobookTracks.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "book.closed")
-                        .font(.system(size: 36))
-                        .foregroundColor(AppTheme.textMuted)
-                    Text("Нажмите на жанр аудиокниг для выгрузки релиза")
-                        .font(.system(size: 13))
-                        .foregroundColor(AppTheme.textMuted)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(service.audiobookTracks) { track in
-                        trackRowView(for: track)
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-        }
-        .onAppear {
-            if service.audiobookTracks.isEmpty {
-                service.fetchAudiobooks(category: "Бестселлеры")
-            }
-        }
-    }
-
-    // MARK: - Секция 5: Результаты поиска
-
+    // MARK: - Секция 4: Результаты поиска
 
     private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Результаты поиска")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .padding(.horizontal, 20)
 
@@ -649,7 +570,7 @@ struct YouTubeView: View {
                 HStack {
                     Spacer()
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
                     Spacer()
                 }
                 .padding(.vertical, 40)
@@ -659,7 +580,7 @@ struct YouTubeView: View {
                         .font(.system(size: 40))
                         .foregroundColor(AppTheme.textMuted)
                     Text("Введите название трека или исполнителя")
-                        .font(.system(size: 14))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(AppTheme.textMuted)
                 }
                 .frame(maxWidth: .infinity)
@@ -667,90 +588,28 @@ struct YouTubeView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(service.tracks) { track in
-                        trackRowView(for: track)
+                        YouTubeTrackRowView(
+                            track: track,
+                            isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                            isDownloaded: downloadManager.isDownloaded(trackId: track.id),
+                            onPlay: {
+                                playTrack(track)
+                            },
+                            onDownload: {
+                                HapticManager.shared.triggerImpact(style: .medium)
+                                if !downloadManager.isDownloaded(trackId: track.id) {
+                                    downloadManager.downloadYouTubeTrack(track)
+                                }
+                            },
+                            onAddToPlaylist: {
+                                HapticManager.shared.triggerImpact(style: .light)
+                                selectedTrackForPlaylist = convertToPlayerTrack(track).toPlaylistTrack()
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
             }
-        }
-    }
-
-    // MARK: - Строка трека (Track Row)
-
-    private func trackRowView(for track: YouTubeTrack) -> some View {
-        let playerTrack = convertToPlayerTrack(track)
-        let isPlayingThis = playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing
-        let isDownloaded = downloadManager.isDownloaded(trackId: track.id)
-
-        return HStack(spacing: 12) {
-            ZStack {
-                YouTubeThumbnail(videoId: track.id, width: 52, height: 52)
-
-                if isPlayingThis {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black.opacity(0.6))
-                            .frame(width: 52, height: 52)
-                        
-                        MiniVisualizerView(isPlaying: true, tintColor: AppTheme.neonCyan)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(track.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    Text(track.uploader)
-                        .font(.system(size: 12))
-                        .foregroundColor(AppTheme.textMuted)
-                        .lineLimit(1)
-
-                    if track.duration > 0 {
-                        Text("•")
-                            .foregroundColor(AppTheme.textMuted)
-                        Text(formatDuration(track.duration))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(AppTheme.textMuted)
-                    }
-                }
-            }
-
-            Spacer()
-
-            // Действия: Скачивание / Плейлист
-            HStack(spacing: 12) {
-                // Скачивание
-                Button(action: {
-                    HapticManager.shared.triggerImpact(style: .medium)
-                    if !isDownloaded {
-                        downloadManager.downloadYouTubeTrack(track)
-                    }
-                }) {
-                    Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
-                        .font(.system(size: 20))
-                        .foregroundColor(isDownloaded ? .green : AppTheme.textSecondary)
-                }
-
-
-                // Добавление в плейлист
-                Button(action: {
-                    HapticManager.shared.triggerImpact(style: .light)
-                    selectedTrackForPlaylist = playerTrack.toPlaylistTrack()
-                }) {
-                    Image(systemName: "plus.circle")
-                        .font(.system(size: 20))
-                        .foregroundColor(AppTheme.textSecondary)
-                }
-            }
-        }
-        .padding(10)
-        .liquidGlass(cornerRadius: 16, opacity: 0.35)
-        .onTapGesture {
-            playTrack(track)
         }
     }
 
@@ -778,9 +637,6 @@ struct YouTubeView: View {
         playerManager.play(track: playerTrack, in: allCurrent)
     }
 
-
-
-
     private func convertToPlayerTrack(_ track: YouTubeTrack) -> PlayerTrack {
         PlayerTrack(
             id: track.id,
@@ -793,6 +649,131 @@ struct YouTubeView: View {
             localCoverURL: nil,
             duration: Double(track.duration)
         )
+    }
+}
+
+// MARK: - Карточка чарта (изолированный компонент)
+
+private struct YouTubeChartCardView: View {
+    let track: YouTubeTrack
+    let isPlaying: Bool
+    let onPlay: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack(alignment: .bottomTrailing) {
+                YouTubeThumbnail(videoId: track.id, width: 146, height: 146)
+
+                Button(action: onPlay) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.black.opacity(0.75))
+                            .frame(width: 38, height: 38)
+                        
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.red)
+                    }
+                    .padding(8)
+                }
+                .buttonStyle(SpringScaleButtonStyle())
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(track.title)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                Text(track.uploader)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppTheme.textMuted)
+                    .lineLimit(1)
+            }
+            .frame(width: 146, alignment: .leading)
+        }
+        .padding(10)
+        .liquidGlass(cornerRadius: 18, opacity: 0.35)
+        .onTapGesture {
+            onPlay()
+        }
+    }
+}
+
+// MARK: - Строка трека YouTube (изолированный компонент для Swift 6)
+
+private struct YouTubeTrackRowView: View {
+    let track: YouTubeTrack
+    let isPlaying: Bool
+    let isDownloaded: Bool
+    let onPlay: () -> Void
+    let onDownload: () -> Void
+    let onAddToPlaylist: () -> Void
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: 12) {
+                ZStack {
+                    YouTubeThumbnail(videoId: track.id, width: 52, height: 52)
+
+                    if isPlaying {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.black.opacity(0.65))
+                                .frame(width: 52, height: 52)
+                            
+                            MiniVisualizerView(isPlaying: true, tintColor: .red)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(track.title)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Text(track.uploader)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppTheme.textMuted)
+                            .lineLimit(1)
+
+                        if track.duration > 0 {
+                            Text("•")
+                                .foregroundColor(AppTheme.textMuted)
+                            Text(formatDuration(track.duration))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(AppTheme.textMuted)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                // Действия: Скачивание / Плейлист
+                HStack(spacing: 10) {
+                    // Скачивание
+                    Button(action: onDownload) {
+                        Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(isDownloaded ? .cyan : AppTheme.textSecondary)
+                    }
+                    .buttonStyle(SpringScaleButtonStyle())
+
+                    // Добавление в плейлист
+                    Button(action: onAddToPlaylist) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(AppTheme.textSecondary)
+                    }
+                    .buttonStyle(SpringScaleButtonStyle())
+                }
+            }
+            .padding(10)
+            .liquidGlass(cornerRadius: 18, opacity: 0.35)
+        }
+        .buttonStyle(SpringScaleButtonStyle())
     }
 
     private func formatDuration(_ seconds: Int) -> String {

@@ -1,106 +1,118 @@
 import SwiftUI
 
-/// Единый хаб для облачных хранилищ (Google Drive + Яндекс Диск)
+/// Единый хаб для облачных хранилищ (Google Drive + Яндекс Диск + Telegram)
 struct CloudHubView: View {
     @State private var selectedSource: CloudSource = .google
     @Binding var selectedTab: Int
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Фон
-            LinearGradient(
-                colors: [Color(red: 0.05, green: 0.08, blue: 0.16), Color(red: 0.09, green: 0.06, blue: 0.15)],
-                startPoint: .top,
-                endPoint: .bottom
+            // Динамический эмбиент-фон в стиле Liquid Glass 2026
+            AmbientBackgroundView(
+                accentColor: selectedSource == .google ? Color.blue : (selectedSource == .yandex ? Color.red : Color.cyan),
+                secondaryColor: AppTheme.neonPurple
             )
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Заголовок + пикер
-                VStack(spacing: 14) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Облако")
-                                .font(.system(size: 32, weight: .bold))
-                                .foregroundColor(.white)
-                            Text("Ваши аудиофайлы из облачных хранилищ")
-                                .font(.system(size: 13))
-                                .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        Image(systemName: "cloud.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.purple, .cyan],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
+                // Хедер хаба
+                headerSection
+
+                // Сегментированный стеклянный переключатель хранилищ
+                cloudSourcePicker
                     .padding(.horizontal, 20)
-                    .padding(.top, 16)
+                    .padding(.bottom, 12)
 
-                    // Сегментированный переключатель облаков
-                    HStack(spacing: 0) {
-                        CloudTabButton(
-                            label: "Google Диск",
-                            icon: "g.circle.fill",
-                            isSelected: selectedSource == .google,
-                            color: .blue
-                        ) {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                selectedSource = .google
-                                HapticManager.shared.triggerSelection()
-                            }
-                        }
-
-                        CloudTabButton(
-                            label: "Яндекс Диск",
-                            icon: "y.circle.fill",
-                            isSelected: selectedSource == .yandex,
-                            color: .red
-                        ) {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                selectedSource = .yandex
-                                HapticManager.shared.triggerSelection()
-                            }
-                        }
-
-                        CloudTabButton(
-                            label: "Telegram",
-                            icon: "paperplane.fill",
-                            isSelected: selectedSource == .telegram,
-                            color: .cyan
-                        ) {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                selectedSource = .telegram
-                                HapticManager.shared.triggerSelection()
-                            }
-                        }
-                    }
-                    .padding(4)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-                }
-                .background(
-                    Color(red: 0.05, green: 0.08, blue: 0.16)
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-                )
-
-                // Содержимое активного облака
+                // Содержимое выбранного облака
                 CloudView(source: selectedSource, selectedTab: $selectedTab)
-                    .navigationBarHidden(true)
-                    .id(selectedSource) // Пересоздать при смене — тригерит onAppear
+                    .id(selectedSource) // Пересоздаем вид для активации fetchAudioFiles
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Хедер
+
+    private var headerSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Облачные сервисы")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Text("Стриминг и загрузка вашей музыки из облака")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(AppTheme.textMuted)
+            }
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.neonPurple.opacity(0.4), AppTheme.neonCyan.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 48, height: 48)
+                    .blur(radius: 4)
+
+                Image(systemName: "cloud.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.cyan, AppTheme.neonPurple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+    }
+
+    // MARK: - Сегментированный переключатель облаков (Liquid Glass)
+
+    private var cloudSourcePicker: some View {
+        HStack(spacing: 4) {
+            CloudTabButton(
+                label: "Google Диск",
+                icon: "g.circle.fill",
+                isSelected: selectedSource == .google,
+                activeColor: .blue
+            ) {
+                switchSource(.google)
+            }
+
+            CloudTabButton(
+                label: "Яндекс Диск",
+                icon: "y.circle.fill",
+                isSelected: selectedSource == .yandex,
+                activeColor: .red
+            ) {
+                switchSource(.yandex)
+            }
+
+            CloudTabButton(
+                label: "Telegram",
+                icon: "paperplane.fill",
+                isSelected: selectedSource == .telegram,
+                activeColor: .cyan
+            ) {
+                switchSource(.telegram)
+            }
+        }
+        .padding(4)
+        .liquidGlass(cornerRadius: 18, opacity: 0.5)
+    }
+
+    private func switchSource(_ source: CloudSource) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            selectedSource = source
+            HapticManager.shared.triggerSelection()
+        }
     }
 }
 
@@ -110,48 +122,37 @@ private struct CloudTabButton: View {
     let label: String
     let icon: String
     let isSelected: Bool
-    let color: Color
+    let activeColor: Color
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .bold))
                 Text(label)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                     .lineLimit(1)
             }
-            .foregroundColor(isSelected ? .white : .gray)
+            .foregroundColor(isSelected ? .white : AppTheme.textMuted)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
                 Group {
                     if isSelected {
                         LinearGradient(
-                            colors: [color.opacity(0.75), color.opacity(0.45)],
+                            colors: [activeColor.opacity(0.85), activeColor.opacity(0.5)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 11))
-                        .shadow(color: color.opacity(0.4), radius: 4, x: 0, y: 2)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .neonGlow(color: activeColor, radius: 8, opacity: 0.4)
                     } else {
                         Color.clear
                     }
                 }
             )
-            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
         }
-        .buttonStyle(ScaleButtonStyle())
-    }
-}
-
-// MARK: - Локальный ScaleButtonStyle (без конфликтов)
-
-private struct ScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+        .buttonStyle(SpringScaleButtonStyle())
     }
 }

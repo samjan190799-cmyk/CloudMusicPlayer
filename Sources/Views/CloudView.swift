@@ -21,7 +21,11 @@ struct CloudView: View {
     @Binding var selectedTab: Int // Для переключения на вкладку настроек
     
     var title: String {
-        source == .google ? "Google Диск" : "Яндекс Диск"
+        switch source {
+        case .google: return "Google Диск"
+        case .yandex: return "Яндекс Диск"
+        case .telegram: return "Telegram"
+        }
     }
     
     var isAuthenticated: Bool {
@@ -54,41 +58,17 @@ struct CloudView: View {
     }
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                backgroundGradient
-                mainContent
-            }
-            .navigationTitle(title)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isAuthenticated && !isLoading {
-                        Button(action: { refreshFiles() }) {
-                            Image(systemName: "arrow.clockwise")
-                                .foregroundColor(.white)
-                        }
-                    }
-                }
-            }
-            .onAppear {
-                if isAuthenticated {
-                    refreshFiles()
-                }
-            }
+        ZStack {
+            mainContent
         }
-        .preferredColorScheme(.dark)
         .sheet(item: $selectedTrackForPlaylist) { track in
             AddToPlaylistView(track: track)
         }
-    }
-
-    private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [Color(red: 0.05, green: 0.08, blue: 0.16), Color(red: 0.09, green: 0.06, blue: 0.15)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+        .onAppear {
+            if isAuthenticated {
+                refreshFiles()
+            }
+        }
     }
 
     @ViewBuilder
@@ -102,229 +82,262 @@ struct CloudView: View {
         }
     }
 
+    // MARK: - Экран Неавторизованного Состояния (Unauthenticated View)
+
     private var unauthenticatedView: some View {
         VStack {
             Spacer()
-            VStack(spacing: 20) {
-                Image(systemName: source == .google ? "logo.googledrive" : "y.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.purple.opacity(0.8))
-                
-                Text("Подключите \(title)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Text("Авторизуйтесь в настройках, чтобы получить доступ к аудиофайлам на вашем \(title) и слушать их онлайн.")
-                    .font(.system(size: 14))
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                
+            
+            VStack(spacing: 22) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    source == .google ? Color.blue.opacity(0.4) : Color.red.opacity(0.4),
+                                    AppTheme.neonPurple.opacity(0.3)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 90, height: 90)
+                        .blur(radius: 12)
+
+                    Image(systemName: source == .google ? "logo.googledrive" : "y.circle.fill")
+                        .font(.system(size: 64, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: source == .google ? [.blue, .cyan] : [.red, .orange],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+
+                VStack(spacing: 8) {
+                    Text("Подключите \(title)")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("Авторизуйтесь в настройках для прямого онлайн-прослушивания и скачивания ваших файлов.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(AppTheme.textMuted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+
                 Button(action: {
+                    HapticManager.shared.triggerSelection()
                     withAnimation {
-                        selectedTab = 4 // Настройки (пятый таб)
+                        selectedTab = 4 // Переход на вкладку Настройки
                     }
                 }) {
-                    Text("Перейти в настройки")
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(LinearGradient(
-                            colors: [.purple, .blue],
+                    HStack(spacing: 10) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 16, weight: .bold))
+                        Text("Перейти в настройки")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: source == .google ? [.blue, AppTheme.neonPurple] : [.red, .purple],
                             startPoint: .leading,
                             endPoint: .trailing
-                        ))
-                        .cornerRadius(12)
-                        .shadow(color: .purple.opacity(0.4), radius: 8, x: 0, y: 4)
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .neonGlow(color: source == .google ? .blue : .red, radius: 10, opacity: 0.5)
                 }
+                .buttonStyle(SpringScaleButtonStyle())
             }
-            .padding(24)
-            .background(Color.white.opacity(0.04))
-            .cornerRadius(20)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            .padding(32)
+            .background(
+                ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                    Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.65)
+                }
             )
-            .padding(20)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .padding(.horizontal, 24)
+
             Spacer()
         }
     }
 
+    // MARK: - Содержимое подключенного облака (Drive Content View)
+
     private var driveContentView: some View {
-        VStack {
-            // Поиск
-            HStack {
+        VStack(spacing: 14) {
+            // Поисковая строка в стиле Liquid Glass
+            HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
-                TextField("Поиск музыки на диске...", text: $searchText)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(AppTheme.neonCyan)
+
+                TextField("Поиск треков на \(title)...", text: $searchText)
                     .foregroundColor(.white)
+                    .font(.system(size: 15, weight: .medium))
+
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(AppTheme.textMuted)
+                            .font(.system(size: 18))
+                    }
+                }
+                
+                Button(action: {
+                    HapticManager.shared.triggerSelection()
+                    refreshFiles()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white.opacity(0.8))
+                }
             }
-            .padding(12)
-            .background(Color.white.opacity(0.06))
-            .cornerRadius(10)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .liquidGlass(cornerRadius: 16, opacity: 0.45)
+            .padding(.horizontal, 20)
+
+            // Контентная зона
             if isLoading {
                 Spacer()
-                ProgressView("Загрузка списка файлов...")
-                    .foregroundColor(.white)
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                        .scaleEffect(1.3)
+                    Text("Загрузка содержимого \(title)...")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(AppTheme.textMuted)
+                }
                 Spacer()
             } else if let error = errorMessage {
                 Spacer()
                 VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.title)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 48))
                         .foregroundColor(.red)
+
                     Text(error)
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, 24)
+
                     Button("Повторить попытку") {
+                        HapticManager.shared.triggerSelection()
                         refreshFiles()
                     }
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.cyan)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
                 }
                 Spacer()
             } else if (source == .google ? googleTracks.isEmpty : yandexTracks.isEmpty) {
                 Spacer()
                 VStack(spacing: 16) {
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray.opacity(0.6))
-                    Text("На диске нет аудиофайлов")
-                        .font(.title3)
+                    Image(systemName: "cloud.slash.fill")
+                        .font(.system(size: 54))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.purple, .cyan],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    Text("На \(title) не найдено аудиофайлов")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
-                    Text("Загрузите файлы форматов .mp3 или других аудио на ваш диск.")
-                        .font(.system(size: 13))
-                        .foregroundColor(.gray)
+
+                    Text("Загрузите файлы аудиоформатов (.mp3, .m4a, .flac) на ваш диск.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppTheme.textMuted)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
+                        .padding(.horizontal, 30)
                 }
+                .padding(28)
+                .background(
+                    ZStack {
+                        VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                        Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.6)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .padding(.horizontal, 24)
                 Spacer()
             } else {
-                List {
-                    if source == .google {
-                        ForEach(googleTracks) { track in
-                            trackRow(id: track.id, title: track.name, size: track.sizeInBytes, sourceTrack: .google(track))
-                        }
-                    } else {
-                        ForEach(yandexTracks) { track in
-                            trackRow(id: track.id, title: track.name, size: track.size ?? 0, sourceTrack: .yandex(track))
+                ScrollView {
+                    VStack(spacing: 10) {
+                        if source == .google {
+                            ForEach(googleTracks) { track in
+                                CloudTrackRowView(
+                                    id: track.id,
+                                    title: track.name,
+                                    formattedSize: formatSize(track.sizeInBytes),
+                                    downloadStatus: downloadManager.getDownloadStatus(for: track.id),
+                                    isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                                    onPlay: {
+                                        playOnlineTrack(id: track.id, title: track.name, sourceTrack: .google(track))
+                                    },
+                                    onDownload: {
+                                        startDownload(.google(track))
+                                    },
+                                    onCancelDownload: {
+                                        downloadManager.cancelDownload(trackId: track.id)
+                                    },
+                                    onAddToPlaylist: {
+                                        selectedTrackForPlaylist = TrackEnum.google(track).toPlaylistTrack()
+                                    }
+                                )
+                            }
+                        } else {
+                            ForEach(yandexTracks) { track in
+                                CloudTrackRowView(
+                                    id: track.id,
+                                    title: track.name,
+                                    formattedSize: formatSize(track.size ?? 0),
+                                    downloadStatus: downloadManager.getDownloadStatus(for: track.id),
+                                    isPlaying: playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing,
+                                    onPlay: {
+                                        playOnlineTrack(id: track.id, title: track.name, sourceTrack: .yandex(track))
+                                    },
+                                    onDownload: {
+                                        startDownload(.yandex(track))
+                                    },
+                                    onCancelDownload: {
+                                        downloadManager.cancelDownload(trackId: track.id)
+                                    },
+                                    onAddToPlaylist: {
+                                        selectedTrackForPlaylist = TrackEnum.yandex(track).toPlaylistTrack()
+                                    }
+                                )
+                            }
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
                 }
-                .listStyle(PlainListStyle())
             }
         }
     }
-    
-    /// Ряд трека
-    private func trackRow(id: String, title: String, size: Int64, sourceTrack: TrackEnum) -> some View {
-        let downloadStatus = downloadManager.getDownloadStatus(for: id)
-        let isPlaying = playerManager.currentTrack?.id == id
-        
-        return HStack(spacing: 12) {
-            // Кнопка проигрывания
-            Button(action: {
-                playOnlineTrack(id: id, title: title, sourceTrack: sourceTrack)
-            }) {
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white.opacity(0.06))
-                            .frame(width: 44, height: 44)
-                        
-                        Image(systemName: isPlaying ? "speaker.wave.3.fill" : "play.fill")
-                            .foregroundColor(isPlaying ? .cyan : .white)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(isPlaying ? .cyan : .white)
-                            .lineLimit(1)
-                        
-                        Text(formatSize(size))
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                    }
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            Spacer()
-            
-            // Кнопка контекстного меню плейлиста
-            Menu {
-                Button(action: {
-                    selectedTrackForPlaylist = sourceTrack.toPlaylistTrack()
-                }) {
-                    Label("Добавить в плейлист", systemImage: "music.note.list")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundColor(.gray)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 12)
-            }
-            
-            // Кнопка/индикатор скачивания
-            ZStack {
-                switch downloadStatus {
-                case .notDownloaded:
-                    Button(action: {
-                        startDownload(sourceTrack)
-                    }) {
-                        Image(systemName: "icloud.and.arrow.down")
-                            .foregroundColor(.purple)
-                            .font(.system(size: 16))
-                            .padding(8)
-                            .background(Color.white.opacity(0.04))
-                            .clipShape(Circle())
-                    }
-                case .downloading(let progress):
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.1), lineWidth: 2)
-                            .frame(width: 28, height: 28)
-                        
-                        Circle()
-                            .trim(from: 0.0, to: CGFloat(progress))
-                            .stroke(Color.cyan, lineWidth: 2)
-                            .frame(width: 28, height: 28)
-                            .rotationEffect(.degrees(-90))
-                        
-                        Button(action: {
-                            downloadManager.cancelDownload(trackId: id)
-                        }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10))
-                                .foregroundColor(.white)
-                        }
-                    }
-                case .downloaded:
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.cyan)
-                        .font(.system(size: 18))
-                        .padding(8)
-                case .failed(let err):
-                    Button(action: {
-                        startDownload(sourceTrack)
-                    }) {
-                        Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 4)
-        .listRowBackground(Color.white.opacity(0.04))
-        .listRowSeparator(.hidden)
-    }
-    
+
     private func refreshFiles() {
         if source == .google {
             googleService.fetchAudioFiles()
@@ -332,8 +345,9 @@ struct CloudView: View {
             yandexService.fetchAudioFiles()
         }
     }
-    
+
     private func startDownload(_ track: TrackEnum) {
+        HapticManager.shared.triggerSelection()
         switch track {
         case .google(let googleTrack):
             downloadManager.downloadGoogleTrack(googleTrack)
@@ -341,11 +355,12 @@ struct CloudView: View {
             downloadManager.downloadYandexTrack(yandexTrack)
         }
     }
-    
+
     /// Запуск онлайн стриминга
     private func playOnlineTrack(id: String, title: String, sourceTrack: TrackEnum) {
+        HapticManager.shared.triggerSelection()
         var playerTrack: PlayerTrack
-        
+
         switch sourceTrack {
         case .google(let track):
             playerTrack = PlayerTrack(
@@ -368,7 +383,7 @@ struct CloudView: View {
                 googleFileId: nil
             )
         }
-        
+
         // Создаем очередь из текущего списка файлов на диске
         let queue: [PlayerTrack]
         if source == .google {
@@ -396,10 +411,10 @@ struct CloudView: View {
                 )
             }
         }
-        
+
         playerManager.play(track: playerTrack, in: queue)
     }
-    
+
     private func formatSize(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useMB, .useKB]
@@ -408,7 +423,157 @@ struct CloudView: View {
     }
 }
 
-/// Перечисление для типизации трека
+// MARK: - Вынесенный компонент карточки трека в облаке (для мгновенной компиляции Swift 6)
+
+private struct CloudTrackRowView: View {
+    let id: String
+    let title: String
+    let formattedSize: String
+    let downloadStatus: DownloadStatus
+    let isPlaying: Bool
+    let onPlay: () -> Void
+    let onDownload: () -> Void
+    let onCancelDownload: () -> Void
+    let onAddToPlaylist: () -> Void
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: 14) {
+                // Иконка Воспроизведения
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            isPlaying ? Color.cyan : Color(red: 0.2, green: 0.12, blue: 0.4),
+                            Color(red: 0.1, green: 0.15, blue: 0.35)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                        .offset(x: isPlaying ? 0 : 1)
+                }
+                .frame(width: 50, height: 50)
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                )
+
+                // Текстовая информация
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Text(formattedSize)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppTheme.textMuted)
+                }
+
+                Spacer()
+
+                // Меню опций
+                Menu {
+                    Button(action: onAddToPlaylist) {
+                        Label("Добавить в плейлист", systemImage: "plus.circle")
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .frame(width: 32, height: 32)
+                }
+
+                // Индикатор и кнопка скачивания
+                downloadButtonSection
+            }
+            .padding(12)
+            .background(
+                ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                    Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.65)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(isPlaying ? Color.cyan.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(SpringScaleButtonStyle())
+    }
+
+    @ViewBuilder
+    private var downloadButtonSection: some View {
+        switch downloadStatus {
+        case .notDownloaded:
+            Button(action: onDownload) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accentGradient)
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .frame(width: 34, height: 34)
+                .neonGlow(color: .purple, radius: 4, opacity: 0.4)
+            }
+            .buttonStyle(SpringScaleButtonStyle())
+
+        case .downloading(let progress):
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 2.5)
+                    .frame(width: 32, height: 32)
+
+                Circle()
+                    .trim(from: 0.0, to: CGFloat(progress))
+                    .stroke(Color.cyan, lineWidth: 2.5)
+                    .frame(width: 32, height: 32)
+                    .rotationEffect(.degrees(-90))
+
+                Button(action: onCancelDownload) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+
+        case .downloaded:
+            ZStack {
+                Circle()
+                    .fill(Color.cyan.opacity(0.15))
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.cyan)
+            }
+            .frame(width: 34, height: 34)
+
+        case .failed:
+            Button(action: onDownload) {
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.2))
+                    Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.red)
+                }
+                .frame(width: 34, height: 34)
+            }
+        }
+    }
+}
+
+// MARK: - Перечисление для типизации трека
 enum TrackEnum {
     case google(GoogleTrack)
     case yandex(YandexTrack)
