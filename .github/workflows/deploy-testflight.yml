@@ -1,0 +1,104 @@
+name: Deploy to App Store Connect / TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Upload to TestFlight
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Cache Homebrew
+        id: cache-homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar
+            /opt/homebrew/bin/xcodegen
+          key: ${{ runner.os }}-homebrew-xcodegen
+
+      - name: Install XcodeGen
+        if: steps.cache-homebrew.outputs.cache-hit != 'true'
+        run: |
+          brew update
+          brew install xcodegen
+
+      - name: Select Latest Xcode
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
+          echo "Using Xcode: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Generate Xcode Project
+        run: |
+          xcodegen generate
+
+      - name: Resolve SPM Dependencies
+        run: |
+          xcodebuild -project CloudMusicPlayer.xcodeproj \
+            -scheme CloudMusicPlayer \
+            -resolvePackageDependencies
+
+      - name: Setup App Store Connect Auth
+        env:
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_API_KEY_BASE64: ${{ secrets.APPSTORE_API_KEY_BASE64 }}
+        run: |
+          if [ -z "$APPSTORE_KEY_ID" ] || [ -z "$APPSTORE_ISSUER_ID" ] || [ -z "$APPSTORE_API_KEY_BASE64" ]; then
+            echo "::error::Не найдены ключи секретов GitHub Secrets (APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_API_KEY_BASE64)."
+            echo "Пожалуйста, добавьте их в Настройки Репозитория -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APPSTORE_API_KEY_BASE64" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
+          echo "Ключ авторизации App Store Connect успешно развернут!"
+
+      - name: Build Unsigned Release IPA
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CloudMusicPlayer.xcodeproj \
+            -scheme CloudMusicPlayer \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            SWIFT_OPTIMIZATION_LEVEL="-O" \
+            build 2>&1 | tee build_log.txt
+          
+          mkdir -p build/Payload
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" | head -1)
+          cp -r "$APP_PATH" build/Payload/CloudMusicPlayer.app
+          cd build
+          zip -r CloudMusicPlayer.ipa Payload/
+          echo "IPA файл успешно собран: $(du -h CloudMusicPlayer.ipa | cut -f1)"
+
+      - name: Upload to App Store Connect / TestFlight
+        env:
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          echo "Отправка CloudMusicPlayer.ipa в App Store Connect..."
+          xcrun altool --upload-app \
+            -f build/CloudMusicPlayer.ipa \
+            -t ios \
+            --apiKey "$APPSTORE_KEY_ID" \
+            --apiIssuer "$APPSTORE_ISSUER_ID"
+          echo "Сборка успешно отправлена в App Store Connect!"
