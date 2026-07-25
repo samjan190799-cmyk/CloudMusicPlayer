@@ -83,7 +83,7 @@ struct ContentView: View {
                     
                     Button(action: {
                         HapticManager.shared.triggerSelection()
-                        playerManager.playNextTrack()
+                        playerManager.nextTrack()
                     }) {
                         Image(systemName: "forward.fill")
                             .font(.system(size: 14, weight: .bold))
