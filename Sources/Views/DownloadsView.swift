@@ -214,7 +214,7 @@ struct DownloadsView: View {
     
     // MARK: - Активные Загрузки (Real-time Progress)
     
-    private func activeDownloadsSection(activeList: [ActiveDownloadState]) -> some View {
+    private func activeDownloadsSection(activeList: [ActiveDownload]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Загружаются сейчас")
                 .font(.system(size: 16, weight: .bold, design: .rounded))
@@ -222,7 +222,7 @@ struct DownloadsView: View {
                 .padding(.horizontal, 24)
             
             VStack(spacing: 10) {
-                ForEach(activeList, id: \.trackId) { download in
+                ForEach(activeList, id: \.id) { download in
                     HStack(spacing: 14) {
                         ZStack {
                             Circle()
