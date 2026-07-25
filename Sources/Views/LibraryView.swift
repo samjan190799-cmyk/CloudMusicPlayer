@@ -357,11 +357,60 @@ struct LibraryView: View {
     
     private func realTrackRowCard(track: LocalTrack) -> some View {
         let isPlaying = playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing
-        
-        return Button(action: {
-            HapticManager.shared.triggerSelection()
-            playTrack(track)
-        }) {
+        return LocalTrackRowView(
+            track: track,
+            isPlaying: isPlaying,
+            onPlay: {
+                HapticManager.shared.triggerSelection()
+                playTrack(track)
+            },
+            onAddToPlaylist: {
+                HapticManager.shared.triggerSelection()
+                selectedTrackForPlaylist = PlaylistTrack(
+                    id: track.id,
+                    title: track.title,
+                    artist: track.artist ?? "Неизвестный исполнитель",
+                    localPath: track.localURL.path
+                )
+            }
+        )
+    }
+    
+    private func playTrack(_ track: LocalTrack) {
+        let playerTrack = PlayerTrack(
+            id: track.id,
+            title: track.title,
+            artist: track.artist ?? "Неизвестный исполнитель",
+            sourceName: "Медиатека",
+            localURL: track.localURL,
+            remoteURL: nil,
+            googleFileId: nil
+        )
+        let allPlayerTracks = filteredLocalTracks.map {
+            PlayerTrack(
+                id: $0.id,
+                title: $0.title,
+                artist: $0.artist ?? "Неизвестный исполнитель",
+                sourceName: "Медиатека",
+                localURL: $0.localURL,
+                remoteURL: nil,
+                googleFileId: nil
+            )
+        }
+        playerManager.play(track: playerTrack, in: allPlayerTracks)
+    }
+}
+
+// MARK: - Отдельный компонент строки трека (для мгновенной компиляции Swift)
+
+private struct LocalTrackRowView: View {
+    let track: LocalTrack
+    let isPlaying: Bool
+    let onPlay: () -> Void
+    let onAddToPlaylist: () -> Void
+    
+    var body: some View {
+        Button(action: onPlay) {
             HStack(spacing: 16) {
                 ZStack {
                     LinearGradient(
@@ -399,15 +448,7 @@ struct LibraryView: View {
                 
                 Spacer()
                 
-                Button(action: {
-                    HapticManager.shared.triggerSelection()
-                    selectedTrackForPlaylist = PlaylistTrack(
-                        id: track.id,
-                        title: track.title,
-                        artist: track.artist ?? "Неизвестный исполнитель",
-                        localPath: track.localURL.path
-                    )
-                }) {
+                Button(action: onAddToPlaylist) {
                     ZStack {
                         Circle()
                             .fill(Color.white.opacity(0.08))
@@ -436,28 +477,5 @@ struct LibraryView: View {
         }
         .buttonStyle(SpringScaleButtonStyle())
     }
-    
-    private func playTrack(_ track: LocalTrack) {
-        let playerTrack = PlayerTrack(
-            id: track.id,
-            title: track.title,
-            artist: track.artist ?? "Неизвестный исполнитель",
-            sourceName: "Медиатека",
-            localURL: track.localURL,
-            remoteURL: nil,
-            googleFileId: nil
-        )
-        let allPlayerTracks = filteredLocalTracks.map {
-            PlayerTrack(
-                id: $0.id,
-                title: $0.title,
-                artist: $0.artist ?? "Неизвестный исполнитель",
-                sourceName: "Медиатека",
-                localURL: $0.localURL,
-                remoteURL: nil,
-                googleFileId: nil
-            )
-        }
-        playerManager.play(track: playerTrack, in: allPlayerTracks)
-    }
+}
 }

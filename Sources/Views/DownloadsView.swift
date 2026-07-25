@@ -326,21 +326,44 @@ struct DownloadsView: View {
     }
     
     private func downloadedTrackRowCard(track: LocalTrack) -> some View {
-        let playerTrack = PlayerTrack(
-            id: track.id,
-            title: track.title,
-            artist: track.artist ?? "Скачанный трек",
-            sourceName: "Загрузки",
-            localURL: track.localURL,
-            remoteURL: nil,
-            googleFileId: nil
-        )
         let isPlaying = playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing
-        
-        return Button(action: {
-            HapticManager.shared.triggerSelection()
-            playLocalTrack(track)
-        }) {
+        return DownloadedTrackRowView(
+            track: track,
+            isPlaying: isPlaying,
+            formattedSize: formatBytes(track.size),
+            onPlay: {
+                HapticManager.shared.triggerSelection()
+                playLocalTrack(track)
+            },
+            onAddToPlaylist: {
+                selectedTrackForPlaylist = PlaylistTrack(
+                    id: track.id,
+                    title: track.title,
+                    artist: track.artist ?? "Скачанный трек",
+                    localPath: track.localURL.path
+                )
+            },
+            onDelete: {
+                withAnimation {
+                    downloadManager.deleteTrack(track)
+                }
+            }
+        )
+    }
+}
+
+// MARK: - Отдельный компонент строки скачанного трека (для мгновенной компиляции Swift)
+
+private struct DownloadedTrackRowView: View {
+    let track: LocalTrack
+    let isPlaying: Bool
+    let formattedSize: String
+    let onPlay: () -> Void
+    let onAddToPlaylist: () -> Void
+    let onDelete: () -> Void
+    
+    var body: some View {
+        Button(action: onPlay) {
             HStack(spacing: 16) {
                 ZStack {
                     LinearGradient(
@@ -374,7 +397,7 @@ struct DownloadsView: View {
                         Text(track.artist ?? "Скачанный файл")
                             .lineLimit(1)
                         Text("•")
-                        Text(formatBytes(track.size))
+                        Text(formattedSize)
                     }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.5))
@@ -384,22 +407,11 @@ struct DownloadsView: View {
                 
                 // Меню действий (Добавить в плейлист / Удалить)
                 Menu {
-                    Button(action: {
-                        selectedTrackForPlaylist = PlaylistTrack(
-                            id: track.id,
-                            title: track.title,
-                            artist: track.artist ?? "Скачанный трек",
-                            localPath: track.localURL.path
-                        )
-                    }) {
+                    Button(action: onAddToPlaylist) {
                         Label("Добавить в плейлист", systemImage: "plus.circle")
                     }
                     
-                    Button(role: .destructive, action: {
-                        withAnimation {
-                            downloadManager.deleteTrack(track)
-                        }
-                    }) {
+                    Button(role: .destructive, action: onDelete) {
                         Label("Удалить файл", systemImage: "trash")
                     }
                 } label: {
@@ -430,6 +442,7 @@ struct DownloadsView: View {
         }
         .buttonStyle(SpringScaleButtonStyle())
     }
+}
     
     // MARK: - Пустое Состояние (Empty State)
     
