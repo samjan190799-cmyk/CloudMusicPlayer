@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Главный экран (Today / Медиатека) в стиле премиального интерфейса с нежным неоновым стеклом (Glassmorphism)
+/// Главный экран (Медиатека) в стиле премиального Liquid Glass без демо-данных
 struct LibraryView: View {
     @ObservedObject var downloadManager = DownloadManager.shared
     @ObservedObject var playerManager = AudioPlayerManager.shared
@@ -12,7 +12,17 @@ struct LibraryView: View {
     @State private var showingCreatePlaylistAlert = false
     @State private var newPlaylistName = ""
     @State private var showDocumentPicker = false
-    @State private var selectedSection = 0
+    
+    var filteredLocalTracks: [LocalTrack] {
+        if searchText.isEmpty {
+            return downloadManager.localTracks
+        } else {
+            return downloadManager.localTracks.filter { track in
+                track.title.localizedCaseInsensitiveContains(searchText) ||
+                (track.artist?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -41,14 +51,14 @@ struct LibraryView: View {
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 28) {
-                        // 1. Хедер (Today + Кнопка Профиля)
+                        // 1. Хедер (Главная + Создать плейлист)
                         headerView
                         
-                        // 2. Секция Playlists (Горизонтальный скролл больших стеклянных карточек)
+                        // 2. Секция Плейлистов (Реальные данные)
                         playlistsSection
                         
-                        // 3. Секция Best new songs (Вертикальный список закругленных рядов)
-                        bestNewSongsSection
+                        // 3. Секция Локальных треков (Реальные данные)
+                        localTracksSection
                     }
                     .padding(.bottom, 120)
                 }
@@ -72,7 +82,7 @@ struct LibraryView: View {
         .preferredColorScheme(.dark)
     }
     
-    // MARK: - Хедер (Today + Профиль)
+    // MARK: - Хедер (Главная + Действия)
     
     private var headerView: some View {
         HStack {
@@ -82,17 +92,19 @@ struct LibraryView: View {
             
             Spacer()
             
+            // Кнопка создания плейлиста
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .medium)
+                showingCreatePlaylistAlert = true
             }) {
                 ZStack {
                     VisualEffectBlur(material: .systemUltraThinMaterialDark)
                     Circle()
                         .fill(Color.white.opacity(0.12))
                     
-                    Image(systemName: "person.fill")
+                    Image(systemName: "plus")
                         .foregroundColor(.white.opacity(0.9))
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                 }
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
@@ -108,253 +120,86 @@ struct LibraryView: View {
         .padding(.top, 16)
     }
     
-    // MARK: - Секция Playlists (Горизонтальный скролл карточек)
+    // MARK: - Секция Плейлистов (Реальные данные)
     
     private var playlistsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Плейлисты")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.95))
-                .padding(.horizontal, 24)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 18) {
-                    // Карточка 1 (New Music Mix)
-                    playlistCard(
-                        title: "New Music Mix",
-                        subtitle: "MUSIC FOR MENG",
-                        gradientColors: [
-                            Color(red: 0.1, green: 0.15, blue: 0.45),
-                            Color(red: 0.35, green: 0.12, blue: 0.65),
-                            Color(red: 0.05, green: 0.05, blue: 0.2)
-                        ]
-                    )
-                    
-                    // Карточка 2 (Favorite Mix)
-                    playlistCard(
-                        title: "Favorite Mix",
-                        subtitle: "MUSIC FOR YOU",
-                        gradientColors: [
-                            Color(red: 0.05, green: 0.25, blue: 0.55),
-                            Color(red: 0.15, green: 0.1, blue: 0.4),
-                            Color(red: 0.2, green: 0.05, blue: 0.45)
-                        ]
-                    )
-
-                    // Карточка 3 (Discover Mix)
-                    playlistCard(
-                        title: "Chillout Mix",
-                        subtitle: "DAILY SELECTION",
-                        gradientColors: [
-                            Color(red: 0.4, green: 0.15, blue: 0.6),
-                            Color(red: 0.1, green: 0.3, blue: 0.65),
-                            Color(red: 0.08, green: 0.06, blue: 0.22)
-                        ]
-                    )
-                }
-                .padding(.horizontal, 24)
-            }
-        }
-    }
-    
-    private func playlistCard(title: String, subtitle: String, gradientColors: [Color]) -> some View {
-        ZStack(alignment: .bottom) {
-            // Абстрактный волнистый нежный фон карточки без конкретных песен/обложек
-            ZStack {
-                LinearGradient(
-                    colors: gradientColors,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                // Декоративные волнистые световые пятна (Fluid Art)
-                GeometryReader { geo in
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: geo.size.height * 0.3))
-                        path.addCurve(
-                            to: CGPoint(x: geo.size.width, y: geo.size.height * 0.7),
-                            control1: CGPoint(x: geo.size.width * 0.5, y: 0),
-                            control2: CGPoint(x: geo.size.width * 0.6, y: geo.size.height)
-                        )
-                    }
-                    .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.35), .cyan.opacity(0.2), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        lineWidth: 2
-                    )
-                    
-                    Circle()
-                        .fill(Color.cyan.opacity(0.25))
-                        .blur(radius: 35)
-                        .frame(width: 120, height: 120)
-                        .offset(x: geo.size.width * 0.3, y: geo.size.height * 0.1)
-                }
-            }
-            .frame(width: 230, height: 260)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            
-            // Нижняя плавающая матовая стеклянная плашка
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    
-                    Text(subtitle)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white.opacity(0.6))
-                        .lineLimit(1)
-                }
+            HStack {
+                Text("Плейлисты")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.95))
                 
                 Spacer()
                 
-                // Фиолетовая неоновая кнопка Play со свечением
-                Button(action: {
-                    HapticManager.shared.triggerImpact(style: .medium)
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: Color(red: 0.65, green: 0.3, blue: 1.0).opacity(0.6), radius: 10, x: 0, y: 4)
-                        
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                            .offset(x: 1)
-                    }
-                    .frame(width: 40, height: 40)
+                if !playlistManager.playlists.isEmpty {
+                    Text("\(playlistManager.playlists.count)")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
                 }
-                .buttonStyle(SpringScaleButtonStyle())
-            }
-            .padding(16)
-            .frame(width: 230)
-            .background(
-                ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
-                    Color(red: 0.12, green: 0.12, blue: 0.28).opacity(0.65)
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-        }
-        .frame(width: 230, height: 260)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.3), radius: 16, x: 0, y: 8)
-    }
-    
-    // MARK: - Секция Best new songs (Чистый интерфейсный список)
-    
-    private var bestNewSongsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Новые треки")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.95))
-                .padding(.horizontal, 24)
-            
-            VStack(spacing: 12) {
-                // Карточка-ряд 1
-                songRowCard(
-                    title: "Post Mates",
-                    artist: "Jarami",
-                    gradientColors: [Color(red: 0.15, green: 0.1, blue: 0.35), Color(red: 0.05, green: 0.2, blue: 0.45)]
-                )
-                
-                // Карточка-ряд 2
-                songRowCard(
-                    title: "Freaky Deaky",
-                    artist: "Tyga & Doja Cat",
-                    gradientColors: [Color(red: 0.25, green: 0.08, blue: 0.4), Color(red: 0.1, green: 0.1, blue: 0.3)]
-                )
-                
-                // Карточка-ряд 3
-                songRowCard(
-                    title: "Shivers",
-                    artist: "Ed Sheeran",
-                    gradientColors: [Color(red: 0.08, green: 0.2, blue: 0.5), Color(red: 0.3, green: 0.1, blue: 0.4)]
-                )
-                
-                // Карточка-ряд 4
-                songRowCard(
-                    title: "As It Was",
-                    artist: "Harry Styles",
-                    gradientColors: [Color(red: 0.35, green: 0.15, blue: 0.5), Color(red: 0.05, green: 0.12, blue: 0.3)]
-                )
             }
             .padding(.horizontal, 24)
+            
+            if playlistManager.playlists.isEmpty {
+                emptyPlaylistsCard
+                    .padding(.horizontal, 24)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 18) {
+                        ForEach(playlistManager.playlists) { playlist in
+                            NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
+                                realPlaylistCard(playlist: playlist)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
         }
     }
     
-    private func songRowCard(title: String, artist: String, gradientColors: [Color]) -> some View {
+    private var emptyPlaylistsCard: some View {
         HStack(spacing: 16) {
-            // Квадратный абстрактный неоновый плейсхолдер 56х56 с закруглением
             ZStack {
-                LinearGradient(
-                    colors: gradientColors,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                Circle()
+                    .fill(Color.purple.opacity(0.2))
+                    .frame(width: 50, height: 50)
                 
-                Image(systemName: "play.fill")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white.opacity(0.9))
-                    .offset(x: 1)
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.purple)
             }
-            .frame(width: 58, height: 58)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text("Нет плейлистов")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 
-                Text(artist)
-                    .font(.system(size: 13, weight: .medium))
+                Text("Нажмите +, чтобы создать первый плейлист")
+                    .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.5))
             }
             
             Spacer()
             
-            Button(action: {
-                HapticManager.shared.triggerSelection()
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.08))
-                    
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .frame(width: 34, height: 34)
+            Button("Создать") {
+                showingCreatePlaylistAlert = true
             }
-            .buttonStyle(SpringScaleButtonStyle())
+            .font(.system(size: 13, weight: .bold))
+            .foregroundColor(.cyan)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.cyan.opacity(0.15))
+            .clipShape(Capsule())
         }
-        .padding(12)
+        .padding(16)
         .background(
             ZStack {
                 VisualEffectBlur(material: .systemUltraThinMaterialDark)
-                Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.65)
+                Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.6)
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -362,6 +207,253 @@ struct LibraryView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
+    }
+    
+    private func realPlaylistCard(playlist: Playlist) -> some View {
+        ZStack(alignment: .bottom) {
+            // Градиентный фон карточки
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.25, green: 0.1, blue: 0.5),
+                        Color(red: 0.08, green: 0.2, blue: 0.55),
+                        Color(red: 0.05, green: 0.05, blue: 0.2)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                Image(systemName: "music.quaver.at.rectangle.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.white.opacity(0.15))
+            }
+            .frame(width: 210, height: 240)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            
+            // Нижняя плавающая матовая стеклянная плашка
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playlist.name)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text("\(playlist.tracks.count) треков")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Spacer()
+                
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                        .offset(x: 1)
+                }
+                .frame(width: 36, height: 36)
+            }
+            .padding(14)
+            .frame(width: 210)
+            .background(
+                ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                    Color(red: 0.12, green: 0.12, blue: 0.28).opacity(0.7)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+        }
+        .frame(width: 210, height: 240)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 14, x: 0, y: 7)
+    }
+    
+    // MARK: - Секция Скачанных Треков (Реальные данные)
+    
+    private var localTracksSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Медиатека")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.95))
+                
+                Spacer()
+                
+                if !filteredLocalTracks.isEmpty {
+                    Text("\(filteredLocalTracks.count) треков")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+            .padding(.horizontal, 24)
+            
+            if filteredLocalTracks.isEmpty {
+                emptyTracksCard
+                    .padding(.horizontal, 24)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(filteredLocalTracks) { track in
+                        realTrackRowCard(track: track)
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
+        }
+    }
+    
+    private var emptyTracksCard: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "music.note.house.fill")
+                .font(.system(size: 50))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.purple, .cyan],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            
+            Text("Ваша медиатека пуста")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            
+            Text("Загружайте музыку из облака (Google Drive, Яндекс Диск, Telegram) или импортируйте из YouTube.")
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity)
+        .background(
+            ZStack {
+                VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.6)
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+    }
+    
+    private func realTrackRowCard(track: LocalTrack) -> some View {
+        let playerTrack = PlayerTrack(
+            id: track.id,
+            title: track.title,
+            artist: track.artist ?? "Неизвестный исполнитель",
+            sourceName: "Медиатека",
+            localURL: track.fileURL,
+            remoteURL: nil,
+            googleFileId: nil
+        )
+        let isPlaying = playerManager.currentTrack?.id == track.id && playerManager.playbackState == .playing
+        
+        return Button(action: {
+            HapticManager.shared.triggerSelection()
+            let allPlayerTracks = filteredLocalTracks.map {
+                PlayerTrack(
+                    id: $0.id,
+                    title: $0.title,
+                    artist: $0.artist ?? "Неизвестный исполнитель",
+                    sourceName: "Медиатека",
+                    localURL: $0.fileURL,
+                    remoteURL: nil,
+                    googleFileId: nil
+                )
+            }
+            playerManager.play(track: playerTrack, in: allPlayerTracks)
+        }) {
+            HStack(spacing: 16) {
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            isPlaying ? Color.cyan : Color(red: 0.2, green: 0.1, blue: 0.4),
+                            Color(red: 0.1, green: 0.15, blue: 0.35)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                        .offset(x: isPlaying ? 0 : 1)
+                }
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                )
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(track.title)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text(track.artist ?? "Неизвестный исполнитель")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    HapticManager.shared.triggerSelection()
+                    selectedTrackForPlaylist = PlaylistTrack(
+                        id: track.id,
+                        title: track.title,
+                        artist: track.artist ?? "Неизвестный исполнитель",
+                        localPath: track.fileURL.path
+                    )
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                        
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .frame(width: 34, height: 34)
+                }
+                .buttonStyle(SpringScaleButtonStyle())
+            }
+            .padding(12)
+            .background(
+                ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                    Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.65)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(isPlaying ? Color.cyan.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
+        }
+        .buttonStyle(SpringScaleButtonStyle())
     }
 }
