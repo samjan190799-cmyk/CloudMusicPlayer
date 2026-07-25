@@ -29,7 +29,7 @@ struct ContentView: View {
                 case 0:
                     LibraryView()
                 case 1:
-                    LibraryView()
+                    DownloadsView()
                 case 2:
                     CloudHubView(selectedTab: $selectedTab)
                 case 3:
@@ -118,11 +118,11 @@ struct ContentView: View {
     
     private var customTabBar: some View {
         HStack(spacing: 4) {
-            tabButton(title: "Explore", icon: "house.fill", index: 0)
-            tabButton(title: "Recent", icon: "sparkle", index: 1)
-            tabButton(title: "Search", icon: "magnifyingglass", index: 2)
-            tabButton(title: "History", icon: "clock.fill", index: 3)
-            tabButton(title: "Profile", icon: "person.fill", index: 4)
+            tabButton(title: "Медиатека", icon: "music.note.house.fill", index: 0)
+            tabButton(title: "Загрузки", icon: "arrow.down.circle.fill", index: 1)
+            tabButton(title: "Облако", icon: "cloud.fill", index: 2)
+            tabButton(title: "YouTube", icon: "play.rectangle.fill", index: 3)
+            tabButton(title: "Настройки", icon: "gearshape.fill", index: 4)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)

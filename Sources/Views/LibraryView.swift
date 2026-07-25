@@ -76,7 +76,7 @@ struct LibraryView: View {
     
     private var headerView: some View {
         HStack {
-            Text("Today")
+            Text("Главная")
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
             
@@ -112,7 +112,7 @@ struct LibraryView: View {
     
     private var playlistsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Playlists")
+            Text("Плейлисты")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundColor(.white.opacity(0.95))
                 .padding(.horizontal, 24)
@@ -263,7 +263,7 @@ struct LibraryView: View {
     
     private var bestNewSongsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Best new songs")
+            Text("Новые треки")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundColor(.white.opacity(0.95))
                 .padding(.horizontal, 24)
