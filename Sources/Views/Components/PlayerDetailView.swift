@@ -267,6 +267,16 @@ struct PlayerDetailView: View {
                         .scaledToFill()
                         .frame(width: 90, height: 90)
                         .clipShape(Circle())
+                } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+                    // Загрузка обложки YouTube-трека через RemoteCoverLoader
+                    RemoteCoverLoader(
+                        trackId: track.id,
+                        sourceName: track.sourceName,
+                        width: 90,
+                        height: 90,
+                        isCircle: true,
+                        placeholderLetter: String(track.title.first ?? "M")
+                    )
                 } else {
                     Circle()
                         .fill(LinearGradient(
@@ -326,6 +336,15 @@ struct PlayerDetailView: View {
                         .scaledToFill()
                         .frame(width: 275, height: 275)
                         .clipShape(RoundedRectangle(cornerRadius: 28))
+                } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+                    // Загрузка обложки YouTube-трека
+                    RemoteCoverLoader(
+                        trackId: track.id,
+                        sourceName: track.sourceName,
+                        width: 275,
+                        height: 275,
+                        cornerRadius: 28
+                    )
                 } else {
                     RoundedRectangle(cornerRadius: 28)
                         .fill(
@@ -533,7 +552,9 @@ struct PlayerDetailView: View {
             // Центральная кнопка Воспроизведения (большая с градиентным свечением)
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .medium)
-                playerManager.togglePlayPause()
+                if playerManager.playbackState != .loading {
+                    playerManager.togglePlayPause()
+                }
             }) {
                 ZStack {
                     Circle()
@@ -547,10 +568,17 @@ struct PlayerDetailView: View {
                         .frame(width: 76, height: 76)
                         .shadow(color: Color(red: 0.62, green: 0.31, blue: 0.87).opacity(0.55), radius: 14, x: 0, y: 0)
                     
-                    Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
-                        .offset(x: playerManager.playbackState == .playing ? 0 : 2)
+                    if playerManager.playbackState == .loading || playerManager.isBuffering {
+                        // Индикатор загрузки/буферизации
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.3)
+                    } else {
+                        Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.white)
+                            .offset(x: playerManager.playbackState == .playing ? 0 : 2)
+                    }
                 }
             }
             .buttonStyle(ScaleButtonStyle())

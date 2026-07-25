@@ -57,6 +57,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
     }
     @Published var repeatMode: RepeatMode = .none
     @Published var isShuffleEnabled = false
+    @Published var isBuffering = false // Индикатор буферизации для UI
     
     // Настройки для Аудиокниг и Подкастов (Скорость, Таймер Сна, Перемотка)
     @Published var playbackRate: Float = 1.0
@@ -67,6 +68,10 @@ class AudioPlayerManager: NSObject, ObservableObject {
     @Published var playlist: [PlayerTrack] = []
     private var shuffledPlaylist: [PlayerTrack] = []
     private var currentTrackIndex: Int = -1
+    
+    // Ретрай при ошибках воспроизведения (макс 2 попытки)
+    private var retryCount = 0
+    private let maxRetries = 2
 
     
     private var player: AVPlayer?
@@ -528,6 +533,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     }
                     self?.updateNowPlayingInfo(for: track)
                     self?.playbackState = .playing
+                    self?.isBuffering = false
+                    self?.retryCount = 0 // Сброс счётчика попыток при успехе
                     self?.player?.playImmediately(atRate: 1.0) // Моментальный запуск
                     
                     // 📌 Автоматическое возобновление позиции для Аудиокниг и Подкастов
@@ -544,8 +551,31 @@ class AudioPlayerManager: NSObject, ObservableObject {
                         // Сбрасываем кеш невалидного/просроченного аудио URL для YouTube
                         YouTubeService.shared.invalidateStreamCache(for: track.id)
                     }
-                    self?.playbackState = .stopped
-                    self?.endBackgroundTask()
+                    self?.retryPlayback(track: track)
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Наблюдение за буферизацией (пустой буфер / готовность продолжить)
+        item.publisher(for: \.isPlaybackBufferEmpty)
+            .sink { [weak self] isEmpty in
+                guard let self = self else { return }
+                if isEmpty && self.playbackState == .playing {
+                    self.isBuffering = true
+                    print("AudioPlayerManager: ⏳ Буфер пуст, ожидание данных...")
+                }
+            }
+            .store(in: &cancellables)
+        
+        item.publisher(for: \.isPlaybackLikelyToKeepUp)
+            .sink { [weak self] isReady in
+                guard let self = self else { return }
+                if isReady && self.isBuffering {
+                    self.isBuffering = false
+                    if self.playbackState == .playing {
+                        self.player?.play()
+                    }
+                    print("AudioPlayerManager: ▶️ Буфер заполнен, воспроизведение продолжено")
                 }
             }
             .store(in: &cancellables)
@@ -602,6 +632,33 @@ class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - Авто-ретрай при ошибке воспроизведения
+    
+    /// Повторная попытка воспроизведения трека (макс. 2 попытки с задержкой 1.5 сек)
+    private func retryPlayback(track: PlayerTrack) {
+        guard retryCount < maxRetries else {
+            print("AudioPlayerManager: ❌ Исчерпаны все \(maxRetries) попытки для трека: \(track.title)")
+            retryCount = 0
+            playbackState = .stopped
+            isBuffering = false
+            endBackgroundTask()
+            // Автоматически переходим на следующий трек
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.nextTrack()
+            }
+            return
+        }
+        
+        retryCount += 1
+        print("AudioPlayerManager: 🔄 Повторная попытка \(retryCount)/\(maxRetries) для трека: \(track.title)")
+        playbackState = .loading
+        isBuffering = true
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.loadAndPlay(track: track)
+        }
+    }
+    
     @objc private func playerItemDidReachEnd() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -631,12 +688,29 @@ class AudioPlayerManager: NSObject, ObservableObject {
         
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
         
-        // Плейсхолдер обложки (красивый градиентный круг на черном фоне)
-        if let image = drawPlaceholderImage(title: track.title) {
+        // Обложка для Lock Screen: локальная или YouTube
+        if let coverURL = track.localCoverURL, let image = UIImage(contentsOfFile: coverURL.path) {
+            // Используем локальную обложку (скачанные треки)
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        } else if let image = drawPlaceholderImage(title: track.title) {
+            // Временная заглушка, пока грузится обложка с YouTube
             nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         }
         
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        
+        // Асинхронно загружаем реальную обложку YouTube-трека для Lock Screen
+        if track.localCoverURL == nil && (track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги") {
+            RemoteCoverUtility.loadCover(for: track.id) { [weak self] coverImage in
+                guard let coverImage = coverImage else { return }
+                DispatchQueue.main.async {
+                    // Обновляем обложку в Lock Screen, только если этот трек ещё играет
+                    guard self?.currentTrack?.id == track.id else { return }
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork] =
+                        MPMediaItemArtwork(boundsSize: coverImage.size) { _ in coverImage }
+                }
+            }
+        }
     }
     
     private func updateNowPlayingPlaybackState() {

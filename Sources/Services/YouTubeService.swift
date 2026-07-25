@@ -83,12 +83,72 @@ class YouTubeService: ObservableObject {
         "https://invidious.drgns.space",
         "https://invidious.privacydev.net",
         "https://invidious.f5.si",
-        "https://invidious.tiekoetter.com"
+        "https://invidious.tiekoetter.com",
+        "https://vid.puffyan.us",
+        "https://invidious.snopyta.org"
     ]
+    
+    // Здоровые инстансы (обновляются при health check)
+    private var healthyInstances: [String] = []
+    private let healthCheckLock = NSLock()
 
     private init() {
         // Автоматически загружаем Чарты при старте
         fetchTrendingMusic(region: .russia)
+        // Запускаем проверку здоровья инстансов в фоне
+        Task.detached(priority: .utility) { [weak self] in
+            await self?.performHealthCheck()
+        }
+    }
+    
+    /// Проверка доступности Invidious-инстансов и сортировка по скорости ответа
+    private func performHealthCheck() async {
+        var results: [(instance: String, latency: TimeInterval)] = []
+        
+        await withTaskGroup(of: (String, TimeInterval?).self) { group in
+            for instance in apiInstances {
+                group.addTask {
+                    let urlStr = "\(instance)/api/v1/stats"
+                    guard let url = URL(string: urlStr) else { return (instance, nil) }
+                    let start = Date()
+                    do {
+                        var request = URLRequest(url: url)
+                        request.timeoutInterval = 3.0
+                        let (_, response) = try await URLSession.shared.data(for: request)
+                        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return (instance, nil) }
+                        let latency = Date().timeIntervalSince(start)
+                        return (instance, latency)
+                    } catch {
+                        return (instance, nil)
+                    }
+                }
+            }
+            for await (instance, latency) in group {
+                if let lat = latency {
+                    results.append((instance, lat))
+                }
+            }
+        }
+        
+        let sorted = results.sorted { $0.latency < $1.latency }.map { $0.instance }
+        
+        healthCheckLock.lock()
+        healthyInstances = sorted
+        healthCheckLock.unlock()
+        
+        print("YouTubeService: ✅ Health check: \(sorted.count)/\(apiInstances.count) инстансов онлайн")
+    }
+    
+    /// Получает отсортированный список инстансов (здоровые сначала, затем остальные)
+    private func getActiveInstances() -> [String] {
+        healthCheckLock.lock()
+        let healthy = healthyInstances
+        healthCheckLock.unlock()
+        
+        if !healthy.isEmpty {
+            return healthy
+        }
+        return apiInstances.shuffled()
     }
 
     // MARK: - Кеширование Аудиопотоков
@@ -121,7 +181,7 @@ class YouTubeService: ObservableObject {
 
     // MARK: - Быстрое Извлечение Аудиопотока (0.3 - 0.8 сек)
 
-    /// Извлечение ссылки с кешированием и параллельной гонкой эндпоинтов
+    /// Извлечение ссылки с кешированием и параллельной гонкой эндпоинтов (+ таймаут 10 сек)
     func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         // 1. Проверка кеша
         if let cached = getCachedAudioURL(for: videoId) {
@@ -131,7 +191,7 @@ class YouTubeService: ObservableObject {
         }
 
         Task {
-            // 2. Параллельная гонка между YouTubeKit и Invidious API
+            // 2. Параллельная гонка между YouTubeKit, Invidious и таймаутом 10 сек
             let resolvedURL: URL? = await withTaskGroup(of: URL?.self) { group -> URL? in
                 // Таск 1: Извлечение через YouTubeKit
                 group.addTask {
@@ -161,6 +221,12 @@ class YouTubeService: ObservableObject {
                     guard let self else { return nil }
                     return await self.fetchAudioFromInvidious(videoId: videoId)
                 }
+                
+                // Таск 3: Таймаут 10 секунд (защита от зависания)
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 сек
+                    return nil
+                }
 
                 // Возвращаем результат от первого успешно ответившего таска
                 for await url in group {
@@ -177,7 +243,7 @@ class YouTubeService: ObservableObject {
                 print("YouTubeService: ✅ Извлечен аудио URL: \(videoId)")
                 completion(finalURL)
             } else {
-                print("YouTubeService: ❌ Ошибка извлечения audio URL для \(videoId)")
+                print("YouTubeService: ❌ Ошибка извлечения audio URL для \(videoId) (таймаут или отказ всех источников)")
                 completion(nil)
             }
         }
@@ -232,7 +298,7 @@ class YouTubeService: ObservableObject {
         
         // 2. Вторичная попытка через Invidious API и прямого аудио-прокси (/latest_version?id=...&itag=140)
         return await withTaskGroup(of: URL?.self) { group -> URL? in
-            for instance in self.apiInstances.shuffled().prefix(4) {
+            for instance in self.getActiveInstances().prefix(4) {
                 group.addTask {
                     let proxyStr = "\(instance)/latest_version?id=\(videoId)&itag=140"
                     if let proxyURL = URL(string: proxyStr) {
@@ -352,7 +418,7 @@ class YouTubeService: ObservableObject {
             
             // 1. Пробуем получить официальный трендовый чарт с фильтрацией сольных треков
             var results: [InvidiousSearchResult]? = nil
-            for instance in self.apiInstances.shuffled().prefix(3) {
+            for instance in self.getActiveInstances().prefix(3) {
                 let urlStr = "\(instance)/api/v1/trending?type=music&region=\(currentRegion.regionCode)"
                 guard let url = URL(string: urlStr) else { continue }
                 if let raw = await self.fetchResults(url: url) {
@@ -519,7 +585,7 @@ class YouTubeService: ObservableObject {
     private func searchRaw(query: String, page: Int) async -> [InvidiousSearchResult]? {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         return await withTaskGroup(of: [InvidiousSearchResult]?.self) { group -> [InvidiousSearchResult]? in
-            for instance in apiInstances.shuffled().prefix(4) {
+            for instance in getActiveInstances().prefix(4) {
                 let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=\(page)"
                 guard let url = URL(string: urlStr) else { continue }
                 group.addTask { [weak self] () -> [InvidiousSearchResult]? in

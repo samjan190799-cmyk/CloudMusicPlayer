@@ -13,6 +13,9 @@ struct CloudMusicPlayerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onOpenURL { url in
+                    TelegramShareManager.shared.handleIncomingAudioURL(url)
+                }
         }
     }
     

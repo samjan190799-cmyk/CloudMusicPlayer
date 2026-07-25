@@ -66,6 +66,18 @@ struct CloudHubView: View {
                                 HapticManager.shared.triggerSelection()
                             }
                         }
+
+                        CloudTabButton(
+                            label: "Telegram",
+                            icon: "paperplane.fill",
+                            isSelected: selectedSource == .telegram,
+                            color: .cyan
+                        ) {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                selectedSource = .telegram
+                                HapticManager.shared.triggerSelection()
+                            }
+                        }
                     }
                     .padding(4)
                     .background(Color.white.opacity(0.06))

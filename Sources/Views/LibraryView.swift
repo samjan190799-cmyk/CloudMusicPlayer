@@ -12,6 +12,7 @@ struct LibraryView: View {
     @State private var selectedTrackForPlaylist: PlaylistTrack? = nil
     @State private var showingCreatePlaylistAlert = false
     @State private var newPlaylistName = ""
+    @State private var showDocumentPicker = false
     
     var filteredTracks: [LocalTrack] {
         if searchText.isEmpty {
@@ -25,11 +26,14 @@ struct LibraryView: View {
     }
     
     var allDeviceAndFileTracks: [LocalTrack] {
-        let combined = deviceScanner.filesAppTracks + deviceScanner.deviceTracks
+        let combined = deviceScanner.filesAppTracks + deviceScanner.deviceTracks + deviceScanner.importedTracks
+        // Убираем дубликаты по id
+        var seen = Set<String>()
+        let unique = combined.filter { seen.insert($0.id).inserted }
         if searchText.isEmpty {
-            return combined
+            return unique
         } else {
-            return combined.filter { track in
+            return unique.filter { track in
                 track.title.localizedCaseInsensitiveContains(searchText) ||
                 (track.artist?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
@@ -102,6 +106,11 @@ struct LibraryView: View {
                 CreatePlaylistDialog(isPresented: $showingCreatePlaylistAlert, playlistName: $newPlaylistName) {
                     playlistManager.createPlaylist(name: newPlaylistName)
                     newPlaylistName = ""
+                }
+            }
+            .sheet(isPresented: $showDocumentPicker) {
+                AudioDocumentPicker { urls in
+                    deviceScanner.importFiles(from: urls)
                 }
             }
         }
@@ -231,6 +240,22 @@ struct LibraryView: View {
                 
                 Spacer()
                 
+                // Кнопка импорта файлов с устройства
+                Button(action: {
+                    HapticManager.shared.triggerImpact(style: .medium)
+                    showDocumentPicker = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Импорт")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppTheme.neonPurple)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(AppTheme.neonPurple.opacity(0.12)))
+                }
+                
                 Button(action: {
                     HapticManager.shared.triggerSelection()
                     deviceScanner.scanAllLocalSources()
@@ -261,14 +286,14 @@ struct LibraryView: View {
                 .padding(.vertical, 30)
             } else if allDeviceAndFileTracks.isEmpty {
                 emptyState(
-                    icon: "iphone.radiowaves.left.and.right",
-                    title: "Файлы на устройстве не найдены",
-                    text: "Добавьте песни через приложение 'Файлы' в папку CloudMusicPlayer или разрешите доступ к Apple Music."
+                    icon: "paperplane.circle.fill",
+                    title: "Файлы и Telegram треки",
+                    text: "Нажмите 'Поделиться' у любого голосового или аудиофайла в Telegram и выберите CloudMusicPlayer, либо нажмите 'Импорт' выше."
                 )
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(allDeviceAndFileTracks) { localTrack in
-                        trackRow(for: localTrack)
+                        deviceTrackRow(for: localTrack)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -580,6 +605,89 @@ struct LibraryView: View {
         )
     }
     
+    private func deviceTrackRow(for localTrack: LocalTrack) -> some View {
+        let isPlayingThis = playerManager.currentTrack?.id == localTrack.id
+        
+        return HStack(spacing: 12) {
+            Button(action: {
+                playDeviceTrack(localTrack)
+            }) {
+                ZStack {
+                    if let coverURL = localTrack.localCoverURL,
+                       let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(placeholderGradient(for: localTrack.title))
+                            .frame(width: 48, height: 48)
+                            .opacity(0.8)
+                    }
+                    let isPlaying = isPlayingThis && playerManager.playbackState == .playing
+                    Circle()
+                        .fill(Color.black.opacity(0.4))
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                                .foregroundColor(.white)
+                                .font(.system(size: 10, weight: .bold))
+                                .offset(x: isPlaying ? 0 : 0.5)
+                        )
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(localTrack.title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(isPlayingThis ? .cyan : .white)
+                    .lineLimit(1)
+                
+                HStack(spacing: 8) {
+                    Text(localTrack.artist ?? "Устройство")
+                        .font(.system(size: 12))
+                        .foregroundColor(.purple.opacity(0.8))
+                        .lineLimit(1)
+                    
+                    if localTrack.size > 0 {
+                        Text(formatSize(localTrack.size))
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            Menu {
+                Button(action: {
+                    selectedTrackForPlaylist = localTrack.toPlaylistTrack()
+                }) {
+                    Label("Добавить в плейлист", systemImage: "music.note.list")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundColor(.gray)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 10)
+            }
+            
+            Image(systemName: "iphone")
+                .foregroundColor(.cyan.opacity(0.7))
+                .font(.system(size: 14))
+        }
+        .padding(10)
+        .background(isPlayingThis ? Color.cyan.opacity(0.08) : Color.white.opacity(0.03))
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isPlayingThis ? Color.cyan.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
+        )
+    }
+    
     // MARK: - Ряд избранного трека (Row)
     
     private func favoriteTrackRow(for playlistTrack: PlaylistTrack) -> some View {
@@ -706,6 +814,38 @@ struct LibraryView: View {
                 title: track.title,
                 artist: track.artist ?? track.source.displayName,
                 sourceName: "Офлайн Медиатека",
+                localURL: track.localURL,
+                remoteURL: nil,
+                googleFileId: nil,
+                localCoverURL: track.localCoverURL,
+                duration: track.duration
+            )
+        }
+        playerManager.play(track: playerTrack, in: queue)
+    }
+    
+    /// Воспроизведение трека с устройства (формирует очередь из device-треков)
+    private func playDeviceTrack(_ localTrack: LocalTrack) {
+        HapticManager.shared.triggerImpact(style: .medium)
+        
+        let playerTrack = PlayerTrack(
+            id: localTrack.id,
+            title: localTrack.title,
+            artist: localTrack.artist ?? "Устройство",
+            sourceName: "Устройство / Файлы",
+            localURL: localTrack.localURL,
+            remoteURL: nil,
+            googleFileId: nil,
+            localCoverURL: localTrack.localCoverURL,
+            duration: localTrack.duration
+        )
+        
+        let queue = allDeviceAndFileTracks.map { track in
+            PlayerTrack(
+                id: track.id,
+                title: track.title,
+                artist: track.artist ?? "Устройство",
+                sourceName: "Устройство / Файлы",
                 localURL: track.localURL,
                 remoteURL: nil,
                 googleFileId: nil,

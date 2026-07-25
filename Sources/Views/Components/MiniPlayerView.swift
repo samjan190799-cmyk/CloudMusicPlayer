@@ -23,6 +23,16 @@ struct MiniPlayerView: View {
                                 .frame(width: 44, height: 44)
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .shadow(color: AppTheme.neonCyan.opacity(0.2), radius: 6, x: 0, y: 3)
+                        } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+                            // Загрузка обложки YouTube-трека
+                            RemoteCoverLoader(
+                                trackId: track.id,
+                                sourceName: track.sourceName,
+                                width: 44,
+                                height: 44,
+                                cornerRadius: 12
+                            )
+                            .shadow(color: AppTheme.neonCyan.opacity(0.2), radius: 6, x: 0, y: 3)
                         } else {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(AppTheme.primaryGradient)
@@ -45,14 +55,14 @@ struct MiniPlayerView: View {
                         }
                     }
                     
-                    // Название трека и источник
+                    // Название трека и имя артиста
                     VStack(alignment: .leading, spacing: 3) {
                         Text(track.title)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(AppTheme.textPrimary)
                             .lineLimit(1)
                         
-                        Text(track.sourceName)
+                        Text(track.artist)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(AppTheme.textSecondary)
                             .lineLimit(1)
@@ -64,16 +74,24 @@ struct MiniPlayerView: View {
                     HStack(spacing: 14) {
                         Button(action: {
                             HapticManager.shared.triggerImpact(style: .medium)
-                            playerManager.togglePlayPause()
+                            if playerManager.playbackState != .loading {
+                                playerManager.togglePlayPause()
+                            }
                         }) {
                             ZStack {
                                 Circle()
                                     .fill(AppTheme.neonCyan.opacity(0.15))
                                     .frame(width: 36, height: 36)
                                 
-                                Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(AppTheme.neonCyan)
+                                if playerManager.playbackState == .loading || playerManager.isBuffering {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(AppTheme.neonCyan)
+                                }
                             }
                         }
                         .buttonStyle(GlowingIconButtonStyle(glowColor: AppTheme.neonCyan))

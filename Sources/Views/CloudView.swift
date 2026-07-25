@@ -4,6 +4,7 @@ import SwiftUI
 enum CloudSource {
     case google
     case yandex
+    case telegram
 }
 
 /// Экран для работы с файлами на облачном диске
@@ -63,8 +64,11 @@ struct CloudView: View {
                 )
                 .ignoresSafeArea()
                 
-                VStack {
-                    if !isAuthenticated {
+                if source == .telegram {
+                    TelegramCloudView()
+                } else {
+                    VStack {
+                        if !isAuthenticated {
                         // Заглушка неавторизованного состояния
                         Spacer()
                         VStack(spacing: 20) {
@@ -171,12 +175,72 @@ struct CloudView: View {
                                     }
                                 } else {
                                     ForEach(yandexTracks) { track in
-                                        trackRow(id: track.id, title: track.name, size: track.size ?? 0, sourceTrack: .yandex(track))
+                            // Поиск
+                            HStack {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(.gray)
+                                TextField("Поиск музыки на диске...", text: $searchText)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(12)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(10)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 10)
+                            
+                            if isLoading {
+                                Spacer()
+                                ProgressView("Загрузка списка файлов...")
+                                    .foregroundColor(.white)
+                                Spacer()
+                            } else if let error = errorMessage {
+                                Spacer()
+                                VStack(spacing: 16) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .font(.title)
+                                        .foregroundColor(.red)
+                                    Text(error)
+                                        .foregroundColor(.white)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 20)
+                                    Button("Повторить попытку") {
+                                        refreshFiles()
+                                    }
+                                    .foregroundColor(.cyan)
+                                }
+                                Spacer()
+                            } else if (source == .google ? googleTracks.isEmpty : yandexTracks.isEmpty) {
+                                Spacer()
+                                VStack(spacing: 16) {
+                                    Image(systemName: "music.note.list")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.gray.opacity(0.6))
+                                    Text("На диске нет аудиофайлов")
+                                        .font(.title3)
+                                        .foregroundColor(.white)
+                                    Text("Загрузите файлы форматов .mp3 или других аудио на ваш диск.")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.gray)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 40)
+                                }
+                                Spacer()
+                            } else {
+                                // Список треков
+                                List {
+                                    if source == .google {
+                                        ForEach(googleTracks) { track in
+                                            trackRow(id: track.id, title: track.name, size: track.sizeInBytes, sourceTrack: .google(track))
+                                        }
+                                    } else {
+                                        ForEach(yandexTracks) { track in
+                                            trackRow(id: track.id, title: track.name, size: track.size ?? 0, sourceTrack: .yandex(track))
+                                        }
                                     }
                                 }
+                                .listStyle(PlainListStyle())
+                                .background(Color.clear)
                             }
-                            .listStyle(PlainListStyle())
-                            .background(Color.clear)
                         }
                     }
                 }
