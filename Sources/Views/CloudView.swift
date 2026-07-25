@@ -261,6 +261,7 @@ struct CloudView: View {
             AddToPlaylistView(track: track)
         }
     }
+}
     
     /// Ряд трека
     private func trackRow(id: String, title: String, size: Int64, sourceTrack: TrackEnum) -> some View {
