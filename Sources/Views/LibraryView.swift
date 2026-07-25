@@ -361,7 +361,7 @@ struct LibraryView: View {
             title: track.title,
             artist: track.artist ?? "Неизвестный исполнитель",
             sourceName: "Медиатека",
-            localURL: track.fileURL,
+            localURL: track.localURL,
             remoteURL: nil,
             googleFileId: nil
         )
@@ -375,7 +375,7 @@ struct LibraryView: View {
                     title: $0.title,
                     artist: $0.artist ?? "Неизвестный исполнитель",
                     sourceName: "Медиатека",
-                    localURL: $0.fileURL,
+                    localURL: $0.localURL,
                     remoteURL: nil,
                     googleFileId: nil
                 )
@@ -425,7 +425,7 @@ struct LibraryView: View {
                         id: track.id,
                         title: track.title,
                         artist: track.artist ?? "Неизвестный исполнитель",
-                        localPath: track.fileURL.path
+                        localPath: track.localURL.path
                     )
                 }) {
                     ZStack {

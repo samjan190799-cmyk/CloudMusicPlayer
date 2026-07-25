@@ -331,7 +331,7 @@ struct DownloadsView: View {
             title: track.title,
             artist: track.artist ?? "Скачанный трек",
             sourceName: "Загрузки",
-            localURL: track.fileURL,
+            localURL: track.localURL,
             remoteURL: nil,
             googleFileId: nil
         )
@@ -389,7 +389,7 @@ struct DownloadsView: View {
                             id: track.id,
                             title: track.title,
                             artist: track.artist ?? "Скачанный трек",
-                            localPath: track.fileURL.path
+                            localPath: track.localURL.path
                         )
                     }) {
                         Label("Добавить в плейлист", systemImage: "plus.circle")
@@ -480,7 +480,7 @@ struct DownloadsView: View {
                 title: $0.title,
                 artist: $0.artist ?? "Скачанный трек",
                 sourceName: "Загрузки",
-                localURL: $0.fileURL,
+                localURL: $0.localURL,
                 remoteURL: nil,
                 googleFileId: nil
             )
