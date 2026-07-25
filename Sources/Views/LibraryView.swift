@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Вкладка оффлайн-медиатеки с премиальным стеклянным дизайном (Glassmorphism)
+/// Главный экран (Today / Медиатека) в стиле премиального интерфейса с нежным неоновым стеклом (Glassmorphism)
 struct LibraryView: View {
     @ObservedObject var downloadManager = DownloadManager.shared
     @ObservedObject var playerManager = AudioPlayerManager.shared
@@ -8,97 +8,52 @@ struct LibraryView: View {
     @ObservedObject var deviceScanner = DeviceMediaScanner.shared
     
     @State private var searchText = ""
-    @State private var selectedSection = 0 // 0 - Загрузки, 1 - На устройстве, 2 - Плейлисты, 3 - Избранное
     @State private var selectedTrackForPlaylist: PlaylistTrack? = nil
     @State private var showingCreatePlaylistAlert = false
     @State private var newPlaylistName = ""
     @State private var showDocumentPicker = false
-    
-    var filteredTracks: [LocalTrack] {
-        if searchText.isEmpty {
-            return downloadManager.localTracks
-        } else {
-            return downloadManager.localTracks.filter { track in
-                track.title.localizedCaseInsensitiveContains(searchText) ||
-                (track.artist?.localizedCaseInsensitiveContains(searchText) ?? false)
-            }
-        }
-    }
-    
-    var allDeviceAndFileTracks: [LocalTrack] {
-        let combined = deviceScanner.filesAppTracks + deviceScanner.deviceTracks + deviceScanner.importedTracks
-        // Убираем дубликаты по id
-        var seen = Set<String>()
-        let unique = combined.filter { seen.insert($0.id).inserted }
-        if searchText.isEmpty {
-            return unique
-        } else {
-            return unique.filter { track in
-                track.title.localizedCaseInsensitiveContains(searchText) ||
-                (track.artist?.localizedCaseInsensitiveContains(searchText) ?? false)
-            }
-        }
-    }
-
-    var favoritesTracks: [PlaylistTrack] {
-        let allFavorites = playlistManager.playlists.first(where: { $0.id == PlaylistManager.favoritesUUID })?.tracks ?? []
-        if searchText.isEmpty {
-            return allFavorites
-        } else {
-            return allFavorites.filter { track in
-                track.title.localizedCaseInsensitiveContains(searchText) ||
-                track.artist.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-    }
+    @State private var selectedSection = 0
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Премиальный фоновый градиент (глубокий фиолетовый космос)
+                // Глубокий неоново-фиолетовый космический градиент на фоне
                 LinearGradient(
                     colors: [
-                        Color(red: 0.05, green: 0.08, blue: 0.16),
-                        Color(red: 0.12, green: 0.04, blue: 0.22)
+                        Color(red: 0.22, green: 0.18, blue: 0.45),
+                        Color(red: 0.12, green: 0.08, blue: 0.28),
+                        Color(red: 0.06, green: 0.04, blue: 0.16)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
                 
-                VStack(spacing: 0) {
-                    // Кастомный Хедер (Today / Медиатека)
-                    headerView
-                    
-                    // Кастомный переключатель разделов (капсула в стиле Glassmorphism)
-                    customSectionPicker
-                    
-                    // Содержимое выбранного раздела
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            if selectedSection == 0 {
-                                // Раздел "Загрузки"
-                                tracksSection
-                            } else if selectedSection == 1 {
-                                // Раздел "На устройстве" (Apple Music + Файлы)
-                                deviceTracksSection
-                            } else if selectedSection == 2 {
-                                // Раздел "Аудиокниги"
-                                AudiobooksView()
-                            } else if selectedSection == 3 {
-                                // Раздел "Плейлисты"
-                                playlistsSection
-                            } else {
-                                // Раздел "Избранное"
-                                favoritesSection
-                            }
-                        }
-                        .padding(.bottom, 30)
+                // Мягкое анимированное нежное свечение на фоне
+                GeometryReader { proxy in
+                    Circle()
+                        .fill(Color(red: 0.45, green: 0.2, blue: 0.9).opacity(0.28))
+                        .blur(radius: 80)
+                        .frame(width: proxy.size.width * 0.9)
+                        .offset(x: -40, y: -60)
+                }
+                .ignoresSafeArea()
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 28) {
+                        // 1. Хедер (Today + Кнопка Профиля)
+                        headerView
+                        
+                        // 2. Секция Playlists (Горизонтальный скролл больших стеклянных карточек)
+                        playlistsSection
+                        
+                        // 3. Секция Best new songs (Вертикальный список закругленных рядов)
+                        bestNewSongsSection
                     }
+                    .padding(.bottom, 120)
                 }
             }
-
-            .navigationBarHidden(true) // Скрываем стандартный навигейшн бар ради кастомного
+            .navigationBarHidden(true)
             .sheet(item: $selectedTrackForPlaylist) { track in
                 AddToPlaylistView(track: track)
             }
@@ -117,792 +72,296 @@ struct LibraryView: View {
         .preferredColorScheme(.dark)
     }
     
-    // MARK: - Кастомный Хедер
+    // MARK: - Хедер (Today + Профиль)
     
     private var headerView: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(selectedSection == 0 ? "Today" : (selectedSection == 1 ? "Playlists" : "Favorites"))
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundColor(.white)
-                
-                Text(selectedSection == 0 ? "Ваша медиатека" : (selectedSection == 1 ? "Ваши подборки" : "Любимая музыка"))
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
-            }
+            Text("Today")
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
             
             Spacer()
             
-            // Круглая стеклянная кнопка действия справа
-            if selectedSection == 1 {
-                Button(action: {
-                    HapticManager.shared.triggerImpact(style: .medium)
-                    showingCreatePlaylistAlert = true
-                }) {
-                    ZStack {
-                        VisualEffectBlur(material: .systemUltraThinMaterial)
-                        Circle()
-                            .fill(Color.white.opacity(0.06))
-                        
-                        Image(systemName: "plus")
-                            .foregroundColor(.white)
-                            .font(.system(size: 18, weight: .bold))
-                    }
-                    .frame(width: 42, height: 42)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(ScaleButtonStyle())
-            } else {
-                // Плейсхолдер профиля в стеклянном стиле как на дизайне
+            Button(action: {
+                HapticManager.shared.triggerImpact(style: .medium)
+            }) {
                 ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterial)
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
                     Circle()
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Color.white.opacity(0.12))
                     
                     Image(systemName: "person.fill")
-                        .foregroundColor(.white.opacity(0.8))
-                        .font(.system(size: 16))
+                        .foregroundColor(.white.opacity(0.9))
+                        .font(.system(size: 17, weight: .semibold))
                 }
-                .frame(width: 42, height: 42)
+                .frame(width: 44, height: 44)
                 .clipShape(Circle())
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
                 )
+                .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
             }
+            .buttonStyle(SpringScaleButtonStyle())
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
     }
     
-    // MARK: - Кастомный переключатель разделов
+    // MARK: - Секция Playlists (Горизонтальный скролл карточек)
     
-    private var customSectionPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                sectionPickerButton(title: "Загрузки", index: 0)
-                sectionPickerButton(title: "На устройстве", index: 1)
-                sectionPickerButton(title: "Аудиокниги", index: 2)
-                sectionPickerButton(title: "Плейлисты", index: 3)
-                sectionPickerButton(title: "Избранное", index: 4)
-            }
-            .padding(4)
-        }
-        .liquidGlass(cornerRadius: 18, opacity: 0.5)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 16)
-    }
-    
-    private func sectionPickerButton(title: String, index: Int) -> some View {
-        let isSelected = selectedSection == index
-        
-        return Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
-                selectedSection = index
-                HapticManager.shared.triggerSelection()
-            }
-        }) {
-            Text(title)
-                .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
-                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    Group {
-                        if isSelected {
-                            AppTheme.primaryGradient
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .neonGlow(color: AppTheme.neonCyan, radius: 8, opacity: 0.4)
-                        } else {
-                            Color.clear
-                        }
-                    }
-                )
-        }
-        .buttonStyle(SpringScaleButtonStyle())
-    }
-
-    // MARK: - Секция На Устройстве (Apple Music + Файлы iOS)
-    
-    private var deviceTracksSection: some View {
-        VStack(spacing: 16) {
-            searchBar
+    private var playlistsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Playlists")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.95))
+                .padding(.horizontal, 24)
             
-            HStack {
-                Text("Локальные файлы и Apple Music")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AppTheme.textMuted)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 18) {
+                    // Карточка 1 (New Music Mix)
+                    playlistCard(
+                        title: "New Music Mix",
+                        subtitle: "MUSIC FOR MENG",
+                        gradientColors: [
+                            Color(red: 0.1, green: 0.15, blue: 0.45),
+                            Color(red: 0.35, green: 0.12, blue: 0.65),
+                            Color(red: 0.05, green: 0.05, blue: 0.2)
+                        ]
+                    )
+                    
+                    // Карточка 2 (Favorite Mix)
+                    playlistCard(
+                        title: "Favorite Mix",
+                        subtitle: "MUSIC FOR YOU",
+                        gradientColors: [
+                            Color(red: 0.05, green: 0.25, blue: 0.55),
+                            Color(red: 0.15, green: 0.1, blue: 0.4),
+                            Color(red: 0.2, green: 0.05, blue: 0.45)
+                        ]
+                    )
+
+                    // Карточка 3 (Discover Mix)
+                    playlistCard(
+                        title: "Chillout Mix",
+                        subtitle: "DAILY SELECTION",
+                        gradientColors: [
+                            Color(red: 0.4, green: 0.15, blue: 0.6),
+                            Color(red: 0.1, green: 0.3, blue: 0.65),
+                            Color(red: 0.08, green: 0.06, blue: 0.22)
+                        ]
+                    )
+                }
+                .padding(.horizontal, 24)
+            }
+        }
+    }
+    
+    private func playlistCard(title: String, subtitle: String, gradientColors: [Color]) -> some View {
+        ZStack(alignment: .bottom) {
+            // Абстрактный волнистый нежный фон карточки без конкретных песен/обложек
+            ZStack {
+                LinearGradient(
+                    colors: gradientColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                // Декоративные волнистые световые пятна (Fluid Art)
+                GeometryReader { geo in
+                    Path { path in
+                        path.move(to: CGPoint(x: 0, y: geo.size.height * 0.3))
+                        path.addCurve(
+                            to: CGPoint(x: geo.size.width, y: geo.size.height * 0.7),
+                            control1: CGPoint(x: geo.size.width * 0.5, y: 0),
+                            control2: CGPoint(x: geo.size.width * 0.6, y: geo.size.height)
+                        )
+                    }
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.35), .cyan.opacity(0.2), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        lineWidth: 2
+                    )
+                    
+                    Circle()
+                        .fill(Color.cyan.opacity(0.25))
+                        .blur(radius: 35)
+                        .frame(width: 120, height: 120)
+                        .offset(x: geo.size.width * 0.3, y: geo.size.height * 0.1)
+                }
+            }
+            .frame(width: 230, height: 260)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            
+            // Нижняя плавающая матовая стеклянная плашка
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
                 
                 Spacer()
                 
-                // Кнопка импорта файлов с устройства
+                // Фиолетовая неоновая кнопка Play со свечением
                 Button(action: {
                     HapticManager.shared.triggerImpact(style: .medium)
-                    showDocumentPicker = true
                 }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus.circle.fill")
-                        Text("Импорт")
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .shadow(color: Color(red: 0.65, green: 0.3, blue: 1.0).opacity(0.6), radius: 10, x: 0, y: 4)
+                        
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white)
+                            .offset(x: 1)
                     }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(AppTheme.neonPurple)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(AppTheme.neonPurple.opacity(0.12)))
+                    .frame(width: 40, height: 40)
                 }
+                .buttonStyle(SpringScaleButtonStyle())
+            }
+            .padding(16)
+            .frame(width: 230)
+            .background(
+                ZStack {
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                    Color(red: 0.12, green: 0.12, blue: 0.28).opacity(0.65)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+        }
+        .frame(width: 230, height: 260)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 16, x: 0, y: 8)
+    }
+    
+    // MARK: - Секция Best new songs (Чистый интерфейсный список)
+    
+    private var bestNewSongsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Best new songs")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.95))
+                .padding(.horizontal, 24)
+            
+            VStack(spacing: 12) {
+                // Карточка-ряд 1
+                songRowCard(
+                    title: "Post Mates",
+                    artist: "Jarami",
+                    gradientColors: [Color(red: 0.15, green: 0.1, blue: 0.35), Color(red: 0.05, green: 0.2, blue: 0.45)]
+                )
                 
-                Button(action: {
-                    HapticManager.shared.triggerSelection()
-                    deviceScanner.scanAllLocalSources()
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Обновить")
-                    }
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(AppTheme.neonCyan)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(AppTheme.neonCyan.opacity(0.12)))
-                }
-            }
-            .padding(.horizontal, 20)
-            
-            if deviceScanner.isScanning {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
-                    Text("Сканирование файлов...")
-                        .font(.system(size: 13))
-                        .foregroundColor(AppTheme.textMuted)
-                    Spacer()
-                }
-                .padding(.vertical, 30)
-            } else if allDeviceAndFileTracks.isEmpty {
-                emptyState(
-                    icon: "paperplane.circle.fill",
-                    title: "Файлы и Telegram треки",
-                    text: "Нажмите 'Поделиться' у любого голосового или аудиофайла в Telegram и выберите CloudMusicPlayer, либо нажмите 'Импорт' выше."
+                // Карточка-ряд 2
+                songRowCard(
+                    title: "Freaky Deaky",
+                    artist: "Tyga & Doja Cat",
+                    gradientColors: [Color(red: 0.25, green: 0.08, blue: 0.4), Color(red: 0.1, green: 0.1, blue: 0.3)]
                 )
-            } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(allDeviceAndFileTracks) { localTrack in
-                        deviceTrackRow(for: localTrack)
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-        }
-    }
-
-
-    
-    // MARK: - Секция треков (Раздел 0)
-    
-    private var tracksSection: some View {
-        VStack(spacing: 16) {
-            searchBar
-            
-            if filteredTracks.isEmpty {
-                emptyState(
-                    icon: "folder.badge.minus",
-                    title: "Медиатека пуста",
-                    text: "Скачивайте файлы из Google Диска или Яндекс Диска во вкладках ниже для прослушивания офлайн."
-                )
-            } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(filteredTracks) { localTrack in
-                        trackRow(for: localTrack)
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-        }
-    }
-    
-    // MARK: - Секция плейлистов (Раздел 1)
-    
-    private var playlistsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            if playlistManager.playlists.isEmpty {
-                emptyState(
-                    icon: "music.note.list",
-                    title: "У вас нет плейлистов",
-                    text: "Создайте новый плейлист с помощью кнопки + в верхнем углу."
-                )
-            } else {
-                // 1. Горизонтальная карусель плейлистов (как в дизайне)
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Коллекции")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            ForEach(playlistManager.playlists) { playlist in
-                                NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
-                                    playlistHorizontalCard(playlist: playlist)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                }
                 
-                // 2. Список всех офлайн треков под каруселью плейлистов
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Все треки")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                    
-                    if downloadManager.localTracks.isEmpty {
-                        Text("Нет треков")
-                            .foregroundColor(.gray)
-                            .padding(.horizontal, 20)
-                    } else {
-                        LazyVStack(spacing: 10) {
-                            ForEach(downloadManager.localTracks.prefix(8)) { track in
-                                trackRow(for: track)
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Секция избранного (Раздел 2)
-    
-    private var favoritesSection: some View {
-        VStack(spacing: 16) {
-            searchBar
-            
-            if favoritesTracks.isEmpty {
-                emptyState(
-                    icon: "heart.slash",
-                    title: "Нет избранных треков",
-                    text: "Добавляйте треки в избранное с помощью кнопки сердечка в плеере."
+                // Карточка-ряд 3
+                songRowCard(
+                    title: "Shivers",
+                    artist: "Ed Sheeran",
+                    gradientColors: [Color(red: 0.08, green: 0.2, blue: 0.5), Color(red: 0.3, green: 0.1, blue: 0.4)]
                 )
-            } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(favoritesTracks) { playlistTrack in
-                        favoriteTrackRow(for: playlistTrack)
-                    }
-                }
-                .padding(.horizontal, 20)
+                
+                // Карточка-ряд 4
+                songRowCard(
+                    title: "As It Was",
+                    artist: "Harry Styles",
+                    gradientColors: [Color(red: 0.35, green: 0.15, blue: 0.5), Color(red: 0.05, green: 0.12, blue: 0.3)]
+                )
             }
+            .padding(.horizontal, 24)
         }
     }
     
-    // MARK: - Поисковая панель
-    
-    private var searchBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.gray)
-            
-            TextField("Поиск...", text: $searchText)
-                .foregroundColor(.white)
-            
-            if !searchText.isEmpty {
-                Button(action: { searchText = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray)
-                }
+    private func songRowCard(title: String, artist: String, gradientColors: [Color]) -> some View {
+        HStack(spacing: 16) {
+            // Квадратный абстрактный неоновый плейсхолдер 56х56 с закруглением
+            ZStack {
+                LinearGradient(
+                    colors: gradientColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                Image(systemName: "play.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .offset(x: 1)
             }
+            .frame(width: 58, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Text(artist)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            
+            Spacer()
+            
+            Button(action: {
+                HapticManager.shared.triggerSelection()
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.08))
+                    
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .frame(width: 34, height: 34)
+            }
+            .buttonStyle(SpringScaleButtonStyle())
         }
         .padding(12)
-        .background(Color.white.opacity(0.06))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.05), lineWidth: 1)
-        )
-        .padding(.horizontal, 20)
-    }
-    
-    // MARK: - Карточка плейлиста в горизонтальной карусели
-    
-    private func playlistHorizontalCard(playlist: Playlist) -> some View {
-        let isFavorites = playlist.id == PlaylistManager.favoritesUUID
-        
-        return VStack(alignment: .leading, spacing: 10) {
-            // Картинка-обложка плейлиста
-            ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: isFavorites ? [.pink, .purple] : [.purple, .blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 170, height: 130)
-                
-                Image(systemName: isFavorites ? "heart.fill" : "music.note.list")
-                    .font(.system(size: 44))
-                    .foregroundColor(.white.opacity(0.35))
-                    .frame(width: 170, height: 130, alignment: .center)
-                
-                // Кнопка быстрого проигрывания (как на макете)
-                Button(action: {
-                    HapticManager.shared.triggerImpact(style: .medium)
-                    if let first = playlist.tracks.first {
-                        let playerTrack = first.toPlayerTrack()
-                        let queue = playlist.tracks.map { $0.toPlayerTrack() }
-                        playerManager.play(track: playerTrack, in: queue)
-                    }
-                }) {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 34, height: 34)
-                        .overlay(
-                            Image(systemName: "play.fill")
-                                .foregroundColor(.purple)
-                                .font(.caption)
-                                .offset(x: 1)
-                        )
-                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
-                }
-                .buttonStyle(ScaleButtonStyle())
-                .padding(10)
-            }
-            
-            // Название плейлиста
-            VStack(alignment: .leading, spacing: 2) {
-                Text(playlist.name)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                
-                Text("\(playlist.tracks.count) треков")
-                    .font(.system(size: 11))
-                    .foregroundColor(.gray)
-            }
-            .padding(.horizontal, 4)
-        }
-        .frame(width: 170)
-        .contextMenu {
-            if !isFavorites {
-                Button(role: .destructive, action: {
-                    playlistManager.deletePlaylist(id: playlist.id)
-                }) {
-                    Label("Удалить плейлист", systemImage: "trash")
-                }
-            }
-        }
-    }
-    
-    // MARK: - Ряд офлайн трека (Row)
-
-    @ViewBuilder
-    private func trackCoverButton(for localTrack: LocalTrack, isPlayingThis: Bool) -> some View {
-        Button(action: {
-            playLocalTrack(localTrack)
-        }) {
+        .background(
             ZStack {
-                if let coverURL = localTrack.localCoverURL,
-                   let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                } else {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(placeholderGradient(for: localTrack.title))
-                        .frame(width: 48, height: 48)
-                        .opacity(0.8)
-                }
-                let isPlaying = isPlayingThis && playerManager.playbackState == .playing
-                Circle()
-                    .fill(Color.black.opacity(0.4))
-                    .frame(width: 24, height: 24)
-                    .overlay(
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .foregroundColor(.white)
-                            .font(.system(size: 10, weight: .bold))
-                            .offset(x: isPlaying ? 0 : 0.5)
-                    )
+                VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                Color(red: 0.12, green: 0.1, blue: 0.24).opacity(0.65)
             }
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-
-    @ViewBuilder
-    private func trackInfoSection(for localTrack: LocalTrack, isPlayingThis: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(localTrack.title)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(isPlayingThis ? .cyan : .white)
-                .lineLimit(1)
-
-            HStack(spacing: 8) {
-                Text(localTrack.artist ?? localTrack.source.displayName)
-                    .font(.system(size: 12))
-                    .foregroundColor(.purple.opacity(0.8))
-                    .lineLimit(1)
-
-                Text(formatSize(localTrack.size))
-                    .font(.system(size: 11))
-                    .foregroundColor(.gray)
-            }
-        }
-    }
-
-    private func trackRow(for localTrack: LocalTrack) -> some View {
-        let isPlayingThis = playerManager.currentTrack?.id == localTrack.id
-
-        return HStack(spacing: 12) {
-            trackCoverButton(for: localTrack, isPlayingThis: isPlayingThis)
-
-            trackInfoSection(for: localTrack, isPlayingThis: isPlayingThis)
-
-            Spacer()
-
-            // Кнопка контекстного меню
-            Menu {
-                Button(action: {
-                    selectedTrackForPlaylist = localTrack.toPlaylistTrack()
-                }) {
-                    Label("Добавить в плейлист", systemImage: "music.note.list")
-                }
-
-                Button(role: .destructive, action: {
-                    HapticManager.shared.triggerImpact(style: .medium)
-                    deleteTrack(localTrack)
-                }) {
-                    Label("Удалить из медиатеки", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundColor(.gray)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 10)
-            }
-
-            // Зелёная галочка офлайн скачивания
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.cyan)
-                .font(.system(size: 12))
-        }
-        .padding(10)
-        .background(isPlayingThis ? Color.cyan.opacity(0.08) : Color.white.opacity(0.03))
-        .cornerRadius(14)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(isPlayingThis ? Color.cyan.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
-    }
-    
-    private func deviceTrackRow(for localTrack: LocalTrack) -> some View {
-        let isPlayingThis = playerManager.currentTrack?.id == localTrack.id
-        
-        return HStack(spacing: 12) {
-            Button(action: {
-                playDeviceTrack(localTrack)
-            }) {
-                ZStack {
-                    if let coverURL = localTrack.localCoverURL,
-                       let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(placeholderGradient(for: localTrack.title))
-                            .frame(width: 48, height: 48)
-                            .opacity(0.8)
-                    }
-                    let isPlaying = isPlayingThis && playerManager.playbackState == .playing
-                    Circle()
-                        .fill(Color.black.opacity(0.4))
-                        .frame(width: 24, height: 24)
-                        .overlay(
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .foregroundColor(.white)
-                                .font(.system(size: 10, weight: .bold))
-                                .offset(x: isPlaying ? 0 : 0.5)
-                        )
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(localTrack.title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(isPlayingThis ? .cyan : .white)
-                    .lineLimit(1)
-                
-                HStack(spacing: 8) {
-                    Text(localTrack.artist ?? "Устройство")
-                        .font(.system(size: 12))
-                        .foregroundColor(.purple.opacity(0.8))
-                        .lineLimit(1)
-                    
-                    if localTrack.size > 0 {
-                        Text(formatSize(localTrack.size))
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            Menu {
-                Button(action: {
-                    selectedTrackForPlaylist = localTrack.toPlaylistTrack()
-                }) {
-                    Label("Добавить в плейлист", systemImage: "music.note.list")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundColor(.gray)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 10)
-            }
-            
-            Image(systemName: "iphone")
-                .foregroundColor(.cyan.opacity(0.7))
-                .font(.system(size: 14))
-        }
-        .padding(10)
-        .background(isPlayingThis ? Color.cyan.opacity(0.08) : Color.white.opacity(0.03))
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(isPlayingThis ? Color.cyan.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
-        )
-    }
-    
-    // MARK: - Ряд избранного трека (Row)
-    
-    private func favoriteTrackRow(for playlistTrack: PlaylistTrack) -> some View {
-        let isPlayingThis = playerManager.currentTrack?.id == playlistTrack.id
-        
-        return HStack(spacing: 12) {
-            Button(action: {
-                playFavoriteTrack(playlistTrack)
-            }) {
-                ZStack {
-                    if let coverURL = playlistTrack.localCoverURL,
-                       let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(placeholderGradient(for: playlistTrack.title))
-                            .frame(width: 48, height: 48)
-                            .opacity(0.8)
-                    }
-                    
-                    Circle()
-                        .fill(Color.black.opacity(0.4))
-                        .frame(width: 24, height: 24)
-                        .overlay(
-                            Image(systemName: isPlayingThis && playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                                .foregroundColor(.white)
-                                .font(.system(size: 10, weight: .bold))
-                                .offset(x: isPlayingThis && playerManager.playbackState == .playing ? 0 : 0.5)
-                        )
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(playlistTrack.title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(isPlayingThis ? .cyan : .white)
-                    .lineLimit(1)
-                
-                HStack(spacing: 8) {
-                    Text(playlistTrack.artist)
-                        .font(.system(size: 12))
-                        .foregroundColor(.purple.opacity(0.8))
-                        .lineLimit(1)
-                    
-                    Text(playlistTrack.sourceName)
-                        .font(.system(size: 11))
-                        .foregroundColor(.gray)
-                }
-            }
-            
-            Spacer()
-            
-            Menu {
-                Button(action: {
-                    playlistManager.removeTrack(trackId: playlistTrack.id, from: PlaylistManager.favoritesUUID)
-                }) {
-                    Label("Удалить из избранного", systemImage: "heart.slash.fill")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .foregroundColor(.gray)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 10)
-            }
-        }
-        .padding(10)
-        .background(isPlayingThis ? Color.cyan.opacity(0.08) : Color.white.opacity(0.03))
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(isPlayingThis ? Color.cyan.opacity(0.2) : Color.white.opacity(0.04), lineWidth: 1)
-        )
-    }
-    
-    // MARK: - Заглушка ошибок / пустоты
-    
-    private func emptyState(icon: String, title: String, text: String) -> some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: icon)
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.6))
-            
-            Text(title)
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-            
-            Text(text)
-                .font(.system(size: 13))
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-            Spacer()
-        }
-        .padding(.vertical, 40)
-    }
-    
-    // MARK: - Helpers
-    
-    private func playLocalTrack(_ localTrack: LocalTrack) {
-        HapticManager.shared.triggerImpact(style: .medium)
-        
-        let playerTrack = PlayerTrack(
-            id: localTrack.id,
-            title: localTrack.title,
-            artist: localTrack.artist ?? localTrack.source.displayName,
-            sourceName: "Офлайн Медиатека",
-            localURL: localTrack.localURL,
-            remoteURL: nil,
-            googleFileId: nil,
-            localCoverURL: localTrack.localCoverURL,
-            duration: localTrack.duration
-        )
-        
-        let queue = downloadManager.localTracks.map { track in
-            PlayerTrack(
-                id: track.id,
-                title: track.title,
-                artist: track.artist ?? track.source.displayName,
-                sourceName: "Офлайн Медиатека",
-                localURL: track.localURL,
-                remoteURL: nil,
-                googleFileId: nil,
-                localCoverURL: track.localCoverURL,
-                duration: track.duration
-            )
-        }
-        playerManager.play(track: playerTrack, in: queue)
-    }
-    
-    /// Воспроизведение трека с устройства (формирует очередь из device-треков)
-    private func playDeviceTrack(_ localTrack: LocalTrack) {
-        HapticManager.shared.triggerImpact(style: .medium)
-        
-        let playerTrack = PlayerTrack(
-            id: localTrack.id,
-            title: localTrack.title,
-            artist: localTrack.artist ?? "Устройство",
-            sourceName: "Устройство / Файлы",
-            localURL: localTrack.localURL,
-            remoteURL: nil,
-            googleFileId: nil,
-            localCoverURL: localTrack.localCoverURL,
-            duration: localTrack.duration
-        )
-        
-        let queue = allDeviceAndFileTracks.map { track in
-            PlayerTrack(
-                id: track.id,
-                title: track.title,
-                artist: track.artist ?? "Устройство",
-                sourceName: "Устройство / Файлы",
-                localURL: track.localURL,
-                remoteURL: nil,
-                googleFileId: nil,
-                localCoverURL: track.localCoverURL,
-                duration: track.duration
-            )
-        }
-        playerManager.play(track: playerTrack, in: queue)
-    }
-    
-    private func playFavoriteTrack(_ favoriteTrack: PlaylistTrack) {
-        HapticManager.shared.triggerImpact(style: .medium)
-        
-        let playerTrack = favoriteTrack.toPlayerTrack()
-        let favorites = playlistManager.playlists.first(where: { $0.id == PlaylistManager.favoritesUUID })
-        let queue = (favorites?.tracks ?? []).map { $0.toPlayerTrack() }
-        playerManager.play(track: playerTrack, in: queue)
-    }
-    
-    private func deleteTrack(_ track: LocalTrack) {
-        downloadManager.deleteTrack(trackId: track.id)
-        if playerManager.currentTrack?.id == track.id {
-            playerManager.previousTrack()
-        }
-    }
-    
-    private func formatSize(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB, .useKB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
-    }
-    
-    private func placeholderGradient(for title: String) -> LinearGradient {
-        let colors: [[Color]] = [
-            [.blue, .purple],
-            [.purple, .pink],
-            [.pink, .orange],
-            [.orange, .yellow],
-            [.teal, .blue],
-            [.green, .teal]
-        ]
-        let index = abs(title.hashValue) % colors.count
-        return LinearGradient(
-            colors: colors[index],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-}
-
-// MARK: - Вспомогательный ScaleButtonStyle (локально)
-
-private struct ScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
     }
 }
