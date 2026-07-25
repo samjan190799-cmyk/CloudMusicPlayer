@@ -64,10 +64,11 @@ struct CloudView: View {
                 )
                 .ignoresSafeArea()
                 
-                if source == .telegram {
-                    TelegramCloudView()
-                } else {
-                    VStack {
+                Group {
+                    if source == .telegram {
+                        TelegramCloudView()
+                    } else {
+                        VStack {
                         if !isAuthenticated {
                         // Заглушка неавторизованного состояния
                         Spacer()
@@ -231,7 +232,6 @@ struct CloudView: View {
                                     }
                                 }
                                 .listStyle(PlainListStyle())
-                                .background(Color.clear)
                             }
                         }
                     }
@@ -261,6 +261,7 @@ struct CloudView: View {
             AddToPlaylistView(track: track)
         }
     }
+}
 }
     
     /// Ряд трека
