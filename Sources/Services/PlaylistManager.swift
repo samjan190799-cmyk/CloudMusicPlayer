@@ -213,6 +213,23 @@ class PlaylistManager: ObservableObject {
     }
 }
 
+// Вспомогательное расширение для конвертации PlaylistTrack в PlayerTrack
+extension PlaylistTrack {
+    func toPlayerTrack() -> PlayerTrack {
+        return PlayerTrack(
+            id: id,
+            title: title,
+            artist: artist,
+            sourceName: sourceName,
+            localURL: localURL,
+            remoteURL: remoteURL,
+            googleFileId: googleFileId,
+            localCoverURL: localCoverURL,
+            duration: duration
+        )
+    }
+}
+
 // Вспомогательное расширение для безопасного поиска плейлиста
 extension Array where Element == Playlist {
     func firstCompound(where id: UUID) -> Playlist? {
