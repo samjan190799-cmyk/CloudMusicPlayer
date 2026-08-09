@@ -82,6 +82,8 @@ jobs:
             -authenticationKeyID "$APPSTORE_KEY_ID" \
             -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8" \
+            DEVELOPMENT_TEAM="V7J345DY58" \
+            CODE_SIGN_STYLE="Automatic" \
             SWIFT_OPTIMIZATION_LEVEL="-O" \
             2>&1 | tee build_log.txt
           echo "Archive успешно создан!"
@@ -98,6 +100,8 @@ jobs:
             <string>app-store-connect</string>
             <key>destination</key>
             <string>upload</string>
+            <key>teamID</key>
+            <string>V7J345DY58</string>
             <key>signingStyle</key>
             <string>automatic</string>
             <key>manageAppVersionAndBuildNumber</key>
@@ -105,7 +109,10 @@ jobs:
           </dict>
           </plist>
           EOF
-          echo "ExportOptions.plist создан"
+          # Убрать лишние пробелы в начале строк XML
+          sed -i '' 's/^          //' ExportOptions.plist
+          echo "ExportOptions.plist создан:"
+          cat ExportOptions.plist
 
       - name: Export & Upload to TestFlight
         env:
