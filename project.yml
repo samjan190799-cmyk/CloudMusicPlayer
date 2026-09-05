@@ -27,7 +27,7 @@ targets:
         CFBundleName: CloudPlayer
         CFBundleDisplayName: CloudPlayer
         CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58
-        CFBundleVersion: "1"
+        CFBundleVersion: "2"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: APPL
         CFBundleExecutable: CloudMusicPlayer
@@ -64,7 +64,7 @@ targets:
         CFBundleName: CloudMusicPlayerWidget
         CFBundleDisplayName: Player Widget
         CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58.widget
-        CFBundleVersion: "1"
+        CFBundleVersion: "2"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: "XPC!"
         NSExtension:
