@@ -18,11 +18,8 @@ struct PlaylistDetailView: View {
     
     var body: some View {
         ZStack {
-            // Эмбиент фон
-            AmbientBackgroundView(
-                accentColor: currentPlaylist.id == PlaylistManager.favoritesUUID ? .pink : AppTheme.neonPurple,
-                secondaryColor: AppTheme.neonCyan
-            )
+            // Обсидиановый фон
+            AmbientBackgroundView()
             .ignoresSafeArea()
             
             VStack(spacing: 0) {
@@ -61,7 +58,7 @@ struct PlaylistDetailView: View {
                 // Фоновое размытое свечение
                 Circle()
                     .fill(LinearGradient(
-                        colors: currentPlaylist.id == PlaylistManager.favoritesUUID ? [.pink, .purple] : [.purple, .cyan],
+                        colors: [Color.white.opacity(0.12), Color.white.opacity(0.02)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
@@ -109,7 +106,7 @@ struct PlaylistDetailView: View {
                         
                         Image(systemName: "camera.fill")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(AppTheme.neonCyan)
+                            .foregroundColor(.white)
                     }
                     .overlay(
                         Circle().stroke(Color.white.opacity(0.2), lineWidth: 1)
@@ -141,18 +138,18 @@ struct PlaylistDetailView: View {
                         Text("Воспроизвести всё")
                             .font(.system(size: 15, weight: .bold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
                     .padding(.horizontal, 32)
                     .padding(.vertical, 12)
                     .background(
                         LinearGradient(
-                            colors: [.purple, .cyan],
+                            colors: [Color.white, Color(white: 0.86)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
                     .clipShape(Capsule())
-                    .neonGlow(color: .cyan, radius: 8, opacity: 0.4)
+                    .shadow(color: Color.white.opacity(0.35), radius: 8)
                 }
                 .buttonStyle(SpringScaleButtonStyle())
                 .padding(.top, 4)

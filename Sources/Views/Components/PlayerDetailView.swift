@@ -20,16 +20,9 @@ struct PlayerDetailView: View {
         Group {
             if let track = playerManager.currentTrack {
                 ZStack {
-                    // 1. Премиальный фоновый градиент
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.06, green: 0.08, blue: 0.18),
-                            Color(red: 0.12, green: 0.05, blue: 0.22)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
+                    // 1. Премиальный обсидиановый фон
+                    AppTheme.darkBackgroundGradient
+                        .ignoresSafeArea()
                     
                     // 2. Медленно пульсирующие фоновые неоновые круги (создают объемное свечение)
                     neonBackgroundGlows
@@ -99,19 +92,18 @@ struct PlayerDetailView: View {
         let bassValue = isPlaying ? CGFloat(visualizerEngine.heights[0]) : 0.05
         
         return ZStack {
-            // Верхнее фиолетовое свечение
+            // Мягкое лунное свечение вокруг винила/обложки в такт музыке
             Circle()
-                .fill(Color(red: 0.62, green: 0.31, blue: 0.87).opacity(0.18 + Double(bassValue * 0.15)))
+                .fill(Color.white.opacity(0.04 + Double(bassValue * 0.05)))
                 .frame(width: 320, height: 320)
-                .blur(radius: 65 + bassValue * 30)
-                .offset(x: -80, y: -100)
+                .blur(radius: 70 + bassValue * 30)
+                .offset(x: 0, y: -60)
             
-            // Нижнее синее свечение
             Circle()
-                .fill(Color(red: 0.0, green: 0.5, blue: 1.0).opacity(0.15 + Double(bassValue * 0.12)))
-                .frame(width: 300, height: 300)
-                .blur(radius: 60 + bassValue * 25)
-                .offset(x: 80, y: 120)
+                .fill(Color(white: 0.9).opacity(0.025 + Double(bassValue * 0.04)))
+                .frame(width: 280, height: 280)
+                .blur(radius: 65 + bassValue * 25)
+                .offset(x: 0, y: 80)
         }
         .ignoresSafeArea()
     }
@@ -200,9 +192,9 @@ struct PlayerDetailView: View {
     // Режим 1: Виниловая пластинка
     private func vinylPlayerView(for track: PlayerTrack, bassScale: CGFloat, bassBlur: CGFloat, bassOpacity: Double) -> some View {
         ZStack {
-            // Подложка неонового свечения
+            // Подложка деликатного лунного свечения
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color.purple.opacity(bassOpacity))
+                .fill(Color.white.opacity(bassOpacity * 0.35))
                 .frame(width: 290, height: 290)
                 .scaleEffect(bassScale)
                 .blur(radius: bassBlur)
@@ -279,12 +271,12 @@ struct PlayerDetailView: View {
                     )
                 } else {
                     Circle()
-                        .fill(LinearGradient(
-                            colors: [.purple, .cyan],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
+                        .fill(Color(white: 0.12))
                         .frame(width: 90, height: 90)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        )
                     
                     Text(String(track.title.first ?? "M").uppercased())
                         .font(.system(size: 26, weight: .bold))
@@ -320,9 +312,9 @@ struct PlayerDetailView: View {
     // Режим 2: Обложка (Парящая карточка из макета Dolby Atmos)
     private func coverArtView(for track: PlayerTrack, bassScale: CGFloat, bassBlur: CGFloat, bassCoverOpacity: Double) -> some View {
         ZStack {
-            // Подложка неонового свечения
+            // Подложка лунного свечения
             RoundedRectangle(cornerRadius: 28)
-                .fill(Color(red: 0.62, green: 0.31, blue: 0.87).opacity(bassCoverOpacity))
+                .fill(Color.white.opacity(bassCoverOpacity * 0.35))
                 .frame(width: 280, height: 280)
                 .scaleEffect(bassScale)
                 .blur(radius: bassBlur)
@@ -347,14 +339,12 @@ struct PlayerDetailView: View {
                     )
                 } else {
                     RoundedRectangle(cornerRadius: 28)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.18, green: 0.08, blue: 0.35), Color(red: 0.05, green: 0.08, blue: 0.20)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(Color(white: 0.10))
                         .frame(width: 275, height: 275)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28)
+                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                        )
                     
                     Image(systemName: "music.note")
                         .font(.system(size: 84))
@@ -451,8 +441,8 @@ struct PlayerDetailView: View {
                     
                     Image(systemName: playlistManager.isTrackFavorite(trackId: track.id) ? "heart.fill" : "heart")
                         .font(.system(size: 20))
-                        .foregroundColor(playlistManager.isTrackFavorite(trackId: track.id) ? .pink : .white)
-                        .shadow(color: playlistManager.isTrackFavorite(trackId: track.id) ? .pink.opacity(0.4) : .clear, radius: 4)
+                        .foregroundColor(playlistManager.isTrackFavorite(trackId: track.id) ? .white : .white.opacity(0.6))
+                        .shadow(color: playlistManager.isTrackFavorite(trackId: track.id) ? Color.white.opacity(0.6) : .clear, radius: 6)
                 }
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
@@ -481,13 +471,13 @@ struct PlayerDetailView: View {
                     Capsule()
                         .fill(
                             LinearGradient(
-                                colors: [Color.cyan, Color.purple],
+                                colors: [Color.white, Color(white: 0.85)],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
                         .frame(width: CGFloat(progress / max(playerManager.duration, 1.0)) * geometry.size.width, height: 4)
-                        .shadow(color: .cyan.opacity(0.5), radius: 3)
+                        .shadow(color: Color.white.opacity(0.4), radius: 3)
                     
                     // Бегунок слайдера (как в дизайне)
                     Circle()
@@ -560,23 +550,23 @@ struct PlayerDetailView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color(red: 0.62, green: 0.31, blue: 0.87), Color(red: 0.0, green: 0.5, blue: 1.0)],
+                                colors: [Color.white, Color(white: 0.88)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 76, height: 76)
-                        .shadow(color: Color(red: 0.62, green: 0.31, blue: 0.87).opacity(0.55), radius: 14, x: 0, y: 0)
+                        .shadow(color: Color.white.opacity(0.40), radius: 14, x: 0, y: 0)
                     
                     if playerManager.playbackState == .loading || playerManager.isBuffering {
                         // Индикатор загрузки/буферизации
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
                             .scaleEffect(1.3)
                     } else {
                         Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
                             .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
                             .offset(x: playerManager.playbackState == .playing ? 0 : 2)
                     }
                 }
@@ -637,10 +627,10 @@ struct PlayerDetailView: View {
                     Text(String(format: "%.2fx", playerManager.playbackRate))
                         .font(.system(size: 12, weight: .bold))
                 }
-                .foregroundColor(AppTheme.neonCyan)
+                .foregroundColor(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(AppTheme.neonCyan.opacity(0.15)))
+                .background(Capsule().fill(Color.white.opacity(0.12)))
             }
 
             // Таймер Сна (Sleep Timer)
@@ -662,10 +652,10 @@ struct PlayerDetailView: View {
                             .font(.system(size: 12, weight: .medium))
                     }
                 }
-                .foregroundColor(playerManager.sleepTimerTimeRemaining != nil ? AppTheme.neonPink : .white.opacity(0.7))
+                .foregroundColor(playerManager.sleepTimerTimeRemaining != nil ? .white : .white.opacity(0.7))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(playerManager.sleepTimerTimeRemaining != nil ? AppTheme.neonPink.opacity(0.2) : Color.white.opacity(0.08)))
+                .background(Capsule().fill(playerManager.sleepTimerTimeRemaining != nil ? Color.white.opacity(0.25) : Color.white.opacity(0.08)))
             }
 
             // Быстрая перемотка вперед +30с
@@ -696,17 +686,17 @@ struct PlayerDetailView: View {
         ZStack {
             VisualEffectBlur(material: .systemUltraThinMaterial)
             Circle()
-                .fill(isSelected ? Color.cyan.opacity(0.12) : Color.white.opacity(0.06))
+                .fill(isSelected ? Color.white.opacity(0.22) : Color.white.opacity(0.06))
             
             Image(systemName: icon)
                 .font(.system(size: iconSize, weight: .bold))
-                .foregroundColor(isSelected ? .cyan : .white)
+                .foregroundColor(isSelected ? .white : .white.opacity(0.65))
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay(
             Circle()
-                .stroke(isSelected ? Color.cyan.opacity(0.25) : Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(isSelected ? Color.white.opacity(0.40) : Color.white.opacity(0.12), lineWidth: 1)
         )
     }
     
@@ -899,7 +889,7 @@ struct RealtimeVisualizerView: View {
                     
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(LinearGradient(
-                            colors: [.purple, .cyan],
+                            colors: [Color.white.opacity(0.90), Color.white.opacity(0.35)],
                             startPoint: .bottom,
                             endPoint: .top
                         ))
@@ -933,7 +923,7 @@ struct CircularVisualizerView: View {
                 
                 RoundedRectangle(cornerRadius: 2)
                     .fill(LinearGradient(
-                        colors: [.purple, .cyan],
+                        colors: [Color.white.opacity(0.85), Color.white.opacity(0.30)],
                         startPoint: .bottom,
                         endPoint: .top
                     ))
@@ -996,8 +986,12 @@ struct TonearmView: View {
                 
                 ZStack {
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.orange)
+                        .fill(Color(white: 0.22))
                         .frame(width: 10, height: 20)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+                        )
                         .shadow(radius: 1)
                     
                     Rectangle()

@@ -13,12 +13,8 @@ struct AddToPlaylistView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Задний фон с красивым размытым градиентом
-                LinearGradient(
-                    colors: [Color(red: 0.08, green: 0.05, blue: 0.16), Color(red: 0.04, green: 0.04, blue: 0.10)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Задний глубокий обсидиановый фон
+                AppTheme.darkBackgroundGradient
                 .ignoresSafeArea()
                 
                 VStack {
@@ -48,9 +44,8 @@ struct AddToPlaylistView: View {
                                     )
                                 } else {
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(LinearGradient(colors: [.purple, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .fill(Color(white: 0.12))
                                         .frame(width: 48, height: 48)
-                                        .opacity(0.8)
                                     
                                     Image(systemName: "music.note")
                                         .foregroundColor(.white)
@@ -130,7 +125,7 @@ struct AddToPlaylistView: View {
                                         Spacer()
                                         
                                         Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(.cyan)
+                                            .foregroundColor(.white)
                                             .font(.title3)
                                     }
                                     .padding(.vertical, 4)
@@ -161,7 +156,7 @@ struct AddToPlaylistView: View {
                             showingCreateAlert = true
                         }) {
                             Image(systemName: "plus")
-                                .foregroundColor(.cyan)
+                                .foregroundColor(.white)
                         }
                     }
                 }

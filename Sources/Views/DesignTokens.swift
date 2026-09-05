@@ -1,34 +1,42 @@
 import SwiftUI
 import UIKit
 
-/// Единая система дизайна Liquid Glass 2026 для CloudMusicPlayer
+/// Единая дизайн-система Obsidian Monochrome Luxe 2026 для CloudMusicPlayer
 enum AppTheme {
-    // MARK: - Цветовая палитра
+    // MARK: - Монохромная палитра (Pure Black & Platinum White)
     
-    static let spaceDark = Color(red: 0.04, green: 0.05, blue: 0.09)
-    static let spaceDarker = Color(red: 0.02, green: 0.03, blue: 0.06)
+    static let pureBlack = Color.black
+    static let spaceDark = Color(red: 0.03, green: 0.03, blue: 0.04)
+    static let spaceDarker = Color(red: 0.015, green: 0.015, blue: 0.02)
+    static let obsidianSurface = Color(red: 0.08, green: 0.08, blue: 0.10)
     
-    static let glassSurface = Color(red: 0.12, green: 0.14, blue: 0.24).opacity(0.45)
-    static let glassSurfaceLight = Color.white.opacity(0.07)
+    static let glassSurface = Color.white.opacity(0.06)
+    static let glassSurfaceLight = Color.white.opacity(0.10)
     
-    static let neonCyan = Color(red: 0.0, green: 0.92, blue: 1.0)
-    static let neonPurple = Color(red: 0.65, green: 0.25, blue: 1.0)
-    static let neonPink = Color(red: 1.0, green: 0.22, blue: 0.65)
+    // Монохромные акценты (чистый белый и полированное серебро)
+    static let accentWhite = Color.white
+    static let accentSilver = Color(white: 0.85)
+    static let accentMuted = Color(white: 0.45)
+    
+    // Совместимость со старыми токенами — приведены к чистой монохромной гамме
+    static let neonCyan = Color.white
+    static let neonPurple = Color(white: 0.88)
+    static let neonPink = Color(white: 0.72)
     
     static let textPrimary = Color.white
     static let textSecondary = Color.white.opacity(0.68)
     static let textMuted = Color.white.opacity(0.42)
     
-    // MARK: - Градиенты
+    // MARK: - Премиальные Градиенты
     
     static let primaryGradient = LinearGradient(
-        colors: [neonCyan, neonPurple],
+        colors: [Color.white, Color(white: 0.80)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
     static let accentGradient = LinearGradient(
-        colors: [neonPurple, neonPink],
+        colors: [Color.white, Color(white: 0.60)],
         startPoint: .leading,
         endPoint: .trailing
     )
@@ -40,7 +48,7 @@ enum AppTheme {
     )
     
     static let darkBackgroundGradient = LinearGradient(
-        colors: [spaceDark, Color(red: 0.07, green: 0.08, blue: 0.14)],
+        colors: [Color.black, Color(red: 0.04, green: 0.04, blue: 0.05)],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -59,7 +67,9 @@ struct LiquidGlassModifier: ViewModifier {
                 ZStack {
                     VisualEffectBlur(material: .systemUltraThinMaterialDark)
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(AppTheme.glassSurface.opacity(opacity))
+                        .fill(Color.black.opacity(0.65))
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(Color.white.opacity(0.04 * opacity))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             )
@@ -70,80 +80,71 @@ struct LiquidGlassModifier: ViewModifier {
                         lineWidth: 1
                     )
             )
-            .shadow(color: Color.black.opacity(0.35), radius: 12, x: 0, y: 6)
+            .shadow(color: Color.black.opacity(0.55), radius: 14, x: 0, y: 7)
     }
 }
 
 extension View {
-    /// Применяет премиальный стеклянный стиль Liquid Glass
+    /// Применяет премиальный стиль темного матового стекла Obsidian Glass
     func liquidGlass(cornerRadius: CGFloat = 22, opacity: Double = 0.5, borderColor: Color? = nil) -> some View {
         self.modifier(LiquidGlassModifier(cornerRadius: cornerRadius, opacity: opacity, borderColor: borderColor))
     }
     
-    /// Добавляет неоновый отблеск по краям
-    func neonGlow(color: Color = AppTheme.neonCyan, radius: CGFloat = 12, opacity: Double = 0.4) -> some View {
+    /// Добавляет деликатное лунное свечение (Moonlight Glow)
+    func neonGlow(color: Color = Color.white, radius: CGFloat = 12, opacity: Double = 0.3) -> some View {
         self.shadow(color: color.opacity(opacity), radius: radius, x: 0, y: 0)
     }
 }
 
-// MARK: - Динамический Анимированный Эмбиент Фон
+// MARK: - Динамический Обсидиановый Фон (Obsidian Ambient Background)
 
 struct AmbientBackgroundView: View {
-    var accentColor: Color = AppTheme.neonCyan
-    var secondaryColor: Color = AppTheme.neonPurple
+    var accentColor: Color = Color.white
+    var secondaryColor: Color = Color(white: 0.8)
     
-    @State private var animateBlobs = false
+    @State private var animateGlow = false
     
     var body: some View {
         ZStack {
+            // Глубокий обсидиановый OLED-фон
             AppTheme.darkBackgroundGradient
                 .ignoresSafeArea()
             
-            // Живые разноцветные светящиеся шары на фоне (Hardware Accelerated Metal Rendering)
+            // Мягкое лунное свечение (Moonlight Aura)
             GeometryReader { proxy in
                 let size = proxy.size
                 
                 Circle()
-                    .fill(accentColor.opacity(0.25))
-                    .blur(radius: 60)
-                    .frame(width: size.width * 0.85, height: size.width * 0.85)
-                    .offset(
-                        x: animateBlobs ? -size.width * 0.18 : size.width * 0.12,
-                        y: animateBlobs ? -size.height * 0.12 : size.height * 0.08
-                    )
-                
-                Circle()
-                    .fill(secondaryColor.opacity(0.22))
-                    .blur(radius: 70)
+                    .fill(Color.white.opacity(0.035))
+                    .blur(radius: 80)
                     .frame(width: size.width * 0.9, height: size.width * 0.9)
                     .offset(
-                        x: animateBlobs ? size.width * 0.22 : -size.width * 0.08,
-                        y: animateBlobs ? size.height * 0.18 : -size.height * 0.04
+                        x: animateGlow ? -size.width * 0.1 : size.width * 0.1,
+                        y: animateGlow ? -size.height * 0.08 : size.height * 0.06
                     )
                 
                 Circle()
-                    .fill(AppTheme.neonPink.opacity(0.14))
-                    .blur(radius: 75)
-                    .frame(width: size.width * 0.7, height: size.width * 0.7)
+                    .fill(Color(white: 0.9).opacity(0.025))
+                    .blur(radius: 95)
+                    .frame(width: size.width * 1.0, height: size.width * 1.0)
                     .offset(
-                        x: animateBlobs ? -size.width * 0.08 : size.width * 0.18,
-                        y: animateBlobs ? size.height * 0.3 : size.height * 0.22
+                        x: animateGlow ? size.width * 0.12 : -size.width * 0.06,
+                        y: animateGlow ? size.height * 0.15 : -size.height * 0.05
                     )
             }
-            .drawingGroup() // Аппаратное ускорение Metal для предотвращения нагрева GPU/CPU
+            .drawingGroup()
             .ignoresSafeArea()
             .onAppear {
                 withAnimation(
-                    .easeInOut(duration: 12.0)
+                    .easeInOut(duration: 10.0)
                     .repeatForever(autoreverses: true)
                 ) {
-                    animateBlobs.toggle()
+                    animateGlow.toggle()
                 }
             }
-
             
-            // Легкий темный оверлей для идеальной читаемости
-            Color.black.opacity(0.25)
+            // Полупрозрачный черный оверлей для максимального контраста
+            Color.black.opacity(0.4)
                 .ignoresSafeArea()
         }
     }
@@ -157,18 +158,18 @@ struct SpringScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1.0)
-            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .opacity(configuration.isPressed ? 0.82 : 1.0)
             .animation(.spring(response: 0.22, dampingFraction: 0.65), value: configuration.isPressed)
     }
 }
 
 struct GlowingIconButtonStyle: ButtonStyle {
-    var glowColor: Color = AppTheme.neonCyan
+    var glowColor: Color = Color.white
     
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
-            .shadow(color: glowColor.opacity(configuration.isPressed ? 0.6 : 0.25), radius: configuration.isPressed ? 12 : 6)
+            .shadow(color: glowColor.opacity(configuration.isPressed ? 0.45 : 0.15), radius: configuration.isPressed ? 12 : 5)
             .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
@@ -185,4 +186,3 @@ struct VisualEffectBlur: UIViewRepresentable {
     
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
 }
-

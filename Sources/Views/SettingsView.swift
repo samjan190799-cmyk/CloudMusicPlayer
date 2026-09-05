@@ -25,13 +25,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Фон
-                LinearGradient(
-                    colors: [Color(red: 0.05, green: 0.08, blue: 0.16), Color(red: 0.09, green: 0.06, blue: 0.15)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                // Глубокий обсидиановый фон
+                AmbientBackgroundView()
                 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -40,7 +35,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 14) {
                             HStack {
                                 Image(systemName: "externaldrive.fill.badge.icloud")
-                                    .foregroundColor(.purple)
+                                    .foregroundColor(.white)
                                     .font(.title3)
                                 Text("Настройка Google Диска")
                                     .font(.headline)

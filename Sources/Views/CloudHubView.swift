@@ -1,18 +1,15 @@
 import SwiftUI
 
-/// Единый хаб для облачных хранилищ (Google Drive + Яндекс Диск + Telegram)
+/// Единый хаб для облачных хранилищ (Google Drive + Яндекс Диск + Telegram) в стиле Obsidian Monochrome
 struct CloudHubView: View {
     @State private var selectedSource: CloudSource = .google
     @Binding var selectedTab: Int
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Динамический эмбиент-фон в стиле Liquid Glass 2026
-            AmbientBackgroundView(
-                accentColor: selectedSource == .google ? Color.blue : (selectedSource == .yandex ? Color.red : Color.cyan),
-                secondaryColor: AppTheme.neonPurple
-            )
-            .ignoresSafeArea()
+            // Динамический обсидиановый эмбиент-фон
+            AmbientBackgroundView()
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Хедер хаба
@@ -47,25 +44,13 @@ struct CloudHubView: View {
             
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [AppTheme.neonPurple.opacity(0.4), AppTheme.neonCyan.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.white.opacity(0.08))
                     .frame(width: 48, height: 48)
-                    .blur(radius: 4)
 
                 Image(systemName: "cloud.fill")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.cyan, AppTheme.neonPurple],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .foregroundColor(.white)
+                    .shadow(color: Color.white.opacity(0.35), radius: 8)
             }
         }
         .padding(.horizontal, 20)
@@ -80,8 +65,7 @@ struct CloudHubView: View {
             CloudTabButton(
                 label: "Google Диск",
                 icon: "g.circle.fill",
-                isSelected: selectedSource == .google,
-                activeColor: .blue
+                isSelected: selectedSource == .google
             ) {
                 switchSource(.google)
             }
@@ -89,8 +73,7 @@ struct CloudHubView: View {
             CloudTabButton(
                 label: "Яндекс Диск",
                 icon: "y.circle.fill",
-                isSelected: selectedSource == .yandex,
-                activeColor: .red
+                isSelected: selectedSource == .yandex
             ) {
                 switchSource(.yandex)
             }
@@ -98,8 +81,7 @@ struct CloudHubView: View {
             CloudTabButton(
                 label: "Telegram",
                 icon: "paperplane.fill",
-                isSelected: selectedSource == .telegram,
-                activeColor: .cyan
+                isSelected: selectedSource == .telegram
             ) {
                 switchSource(.telegram)
             }
@@ -122,7 +104,6 @@ private struct CloudTabButton: View {
     let label: String
     let icon: String
     let isSelected: Bool
-    let activeColor: Color
     let action: () -> Void
 
     var body: some View {
@@ -134,19 +115,19 @@ private struct CloudTabButton: View {
                     .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                     .lineLimit(1)
             }
-            .foregroundColor(isSelected ? .white : AppTheme.textMuted)
+            .foregroundColor(isSelected ? .black : AppTheme.textMuted)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
                 Group {
                     if isSelected {
                         LinearGradient(
-                            colors: [activeColor.opacity(0.85), activeColor.opacity(0.5)],
+                            colors: [Color.white, Color(white: 0.86)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .neonGlow(color: activeColor, radius: 8, opacity: 0.4)
+                        .shadow(color: Color.white.opacity(0.35), radius: 6)
                     } else {
                         Color.clear
                     }

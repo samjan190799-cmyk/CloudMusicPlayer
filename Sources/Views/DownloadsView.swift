@@ -27,27 +27,8 @@ struct DownloadsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Глубокий неоново-фиолетовый космический градиент на фоне
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.22, green: 0.18, blue: 0.45),
-                        Color(red: 0.12, green: 0.08, blue: 0.28),
-                        Color(red: 0.06, green: 0.04, blue: 0.16)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                // Мягкое нежное свечение на фоне
-                GeometryReader { proxy in
-                    Circle()
-                        .fill(Color(red: 0.35, green: 0.25, blue: 0.95).opacity(0.25))
-                        .blur(radius: 80)
-                        .frame(width: proxy.size.width * 0.85)
-                        .offset(x: proxy.size.width * 0.2, y: -40)
-                }
-                .ignoresSafeArea()
+                // Глубокий обсидиановый фон
+                AmbientBackgroundView()
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 24) {
@@ -106,28 +87,17 @@ struct DownloadsView: View {
                     }
                 }) {
                     ZStack {
-                        VisualEffectBlur(material: .systemUltraThinMaterialDark)
                         Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(Color.white)
                         
                         Image(systemName: "play.fill")
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
                             .font(.system(size: 16, weight: .bold))
                             .offset(x: 1)
                     }
                     .frame(width: 44, height: 44)
                     .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-                    .shadow(color: Color.purple.opacity(0.5), radius: 10, x: 0, y: 4)
+                    .shadow(color: Color.white.opacity(0.35), radius: 8, x: 0, y: 2)
                 }
                 .buttonStyle(SpringScaleButtonStyle())
             }
@@ -144,10 +114,10 @@ struct DownloadsView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.purple.opacity(0.2))
+                        .fill(Color.white.opacity(0.10))
                         .frame(width: 42, height: 42)
                     Image(systemName: "arrow.down.circle.fill")
-                        .foregroundColor(.purple)
+                        .foregroundColor(.white)
                         .font(.system(size: 18, weight: .bold))
                 }
                 
@@ -178,10 +148,10 @@ struct DownloadsView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.cyan.opacity(0.2))
+                        .fill(Color.white.opacity(0.10))
                         .frame(width: 42, height: 42)
                     Image(systemName: "internaldrive.fill")
-                        .foregroundColor(.cyan)
+                        .foregroundColor(.white)
                         .font(.system(size: 18, weight: .bold))
                 }
                 

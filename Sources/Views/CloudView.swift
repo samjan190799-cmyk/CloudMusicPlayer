@@ -91,28 +91,13 @@ struct CloudView: View {
             VStack(spacing: 22) {
                 ZStack {
                     Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    source == .google ? Color.blue.opacity(0.4) : Color.red.opacity(0.4),
-                                    AppTheme.neonPurple.opacity(0.3)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(Color.white.opacity(0.08))
                         .frame(width: 90, height: 90)
-                        .blur(radius: 12)
 
                     Image(systemName: source == .google ? "externaldrive.fill.badge.icloud" : "y.circle.fill")
                         .font(.system(size: 64, weight: .bold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: source == .google ? [.blue, .cyan] : [.red, .orange],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .foregroundColor(.white)
+                        .shadow(color: Color.white.opacity(0.35), radius: 10)
                 }
 
                 VStack(spacing: 8) {
@@ -139,18 +124,18 @@ struct CloudView: View {
                         Text("Перейти в настройки")
                             .font(.system(size: 15, weight: .bold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
                     .padding(.horizontal, 28)
                     .padding(.vertical, 14)
                     .background(
                         LinearGradient(
-                            colors: source == .google ? [.blue, AppTheme.neonPurple] : [.red, .purple],
+                            colors: [Color.white, Color(white: 0.86)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .neonGlow(color: source == .google ? .blue : .red, radius: 10, opacity: 0.5)
+                    .shadow(color: Color.white.opacity(0.35), radius: 8)
                 }
                 .buttonStyle(SpringScaleButtonStyle())
             }

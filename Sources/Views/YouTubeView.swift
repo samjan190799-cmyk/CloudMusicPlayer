@@ -151,8 +151,8 @@ struct YouTubeView: View {
 
     var body: some View {
         ZStack {
-            // Эмбиент-фон 2026
-            AmbientBackgroundView(accentColor: Color.red, secondaryColor: AppTheme.neonCyan)
+            // Глубокий обсидиановый фон
+            AmbientBackgroundView()
 
             VStack(spacing: 0) {
                 // Верхняя панель & Поиск
@@ -202,24 +202,23 @@ struct YouTubeView: View {
                 
                 ZStack {
                     Circle()
-                        .fill(Color.red.opacity(0.2))
+                        .fill(Color.white.opacity(0.08))
                         .frame(width: 48, height: 48)
-                        .blur(radius: 6)
                     
                     Image(systemName: "play.rectangle.fill")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundColor(.red)
-                        .shadow(color: .red.opacity(0.6), radius: 8)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                        .shadow(color: Color.white.opacity(0.35), radius: 8)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
             
-            // Поисковая строка в стиле Liquid Glass
+            // Поисковая строка в стиле Obsidian Glass
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.red)
+                    .foregroundColor(.white.opacity(0.6))
 
                 TextField("Исполнитель, трек, альбом...", text: $searchQuery)
                     .foregroundColor(.white)
@@ -277,15 +276,15 @@ struct YouTubeView: View {
         }) {
             Text(title)
                 .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
-                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
+                .foregroundColor(isSelected ? .black : AppTheme.textMuted)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
                     Group {
                         if isSelected {
-                            LinearGradient(colors: [Color.red.opacity(0.85), AppTheme.neonPurple.opacity(0.6)], startPoint: .leading, endPoint: .trailing)
+                            LinearGradient(colors: [Color.white, Color(white: 0.86)], startPoint: .leading, endPoint: .trailing)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .neonGlow(color: .red, radius: 6, opacity: 0.4)
+                                .shadow(color: Color.white.opacity(0.35), radius: 6)
                         } else {
                             Color.clear
                         }
@@ -487,15 +486,15 @@ struct YouTubeView: View {
                         }) {
                             Text(name)
                                 .font(.system(size: 13, weight: isSelected ? .bold : .medium))
-                                .foregroundColor(isSelected ? .white : AppTheme.textMuted)
+                                .foregroundColor(isSelected ? .black : AppTheme.textMuted)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
                                 .background(
                                     Group {
                                         if isSelected {
-                                            LinearGradient(colors: [AppTheme.neonPurple, Color.cyan], startPoint: .leading, endPoint: .trailing)
+                                            LinearGradient(colors: [Color.white, Color(white: 0.86)], startPoint: .leading, endPoint: .trailing)
                                                 .clipShape(Capsule())
-                                                .neonGlow(color: AppTheme.neonPurple, radius: 6, opacity: 0.4)
+                                                .shadow(color: Color.white.opacity(0.35), radius: 6)
                                         } else {
                                             Capsule()
                                                 .fill(Color.white.opacity(0.06))
@@ -676,7 +675,7 @@ private struct YouTubeChartCardView: View {
                         
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.red)
+                            .foregroundColor(.white)
                     }
                     .padding(8)
                 }
@@ -726,7 +725,7 @@ private struct YouTubeTrackRowView: View {
                                 .fill(Color.black.opacity(0.65))
                                 .frame(width: 52, height: 52)
                             
-                            MiniVisualizerView(isPlaying: true, tintColor: .red)
+                            MiniVisualizerView(isPlaying: true, tintColor: .white)
                         }
                     }
                 }

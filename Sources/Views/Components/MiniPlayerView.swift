@@ -35,9 +35,12 @@ struct MiniPlayerView: View {
                             .shadow(color: AppTheme.neonCyan.opacity(0.2), radius: 6, x: 0, y: 3)
                         } else {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(AppTheme.primaryGradient)
+                                .fill(Color.white.opacity(0.08))
                                 .frame(width: 44, height: 44)
-                                .shadow(color: AppTheme.neonPurple.opacity(0.3), radius: 6, x: 0, y: 3)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                )
                             
                             Image(systemName: "music.note")
                                 .foregroundColor(.white)
@@ -50,7 +53,7 @@ struct MiniPlayerView: View {
                                     .fill(Color.black.opacity(0.65))
                                     .frame(width: 24, height: 22)
                                 
-                                MiniVisualizerView(isPlaying: true, tintColor: AppTheme.neonCyan)
+                                MiniVisualizerView(isPlaying: true, tintColor: .white)
                             }
                         }
                     }
@@ -80,21 +83,21 @@ struct MiniPlayerView: View {
                         }) {
                             ZStack {
                                 Circle()
-                                    .fill(AppTheme.neonCyan.opacity(0.15))
+                                    .fill(Color.white.opacity(0.12))
                                     .frame(width: 36, height: 36)
                                 
                                 if playerManager.playbackState == .loading || playerManager.isBuffering {
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.neonCyan))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 } else {
                                     Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
                                         .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(AppTheme.neonCyan)
+                                        .foregroundColor(.white)
                                 }
                             }
                         }
-                        .buttonStyle(GlowingIconButtonStyle(glowColor: AppTheme.neonCyan))
+                        .buttonStyle(GlowingIconButtonStyle(glowColor: Color.white))
                         
                         Button(action: {
                             HapticManager.shared.triggerImpact(style: .light)
@@ -119,9 +122,9 @@ struct MiniPlayerView: View {
                             .frame(height: 2.5)
                         
                         Rectangle()
-                            .fill(AppTheme.primaryGradient)
+                            .fill(Color.white)
                             .frame(width: geo.size.width * min(max(percent, 0.0), 1.0), height: 2.5)
-                            .neonGlow(color: AppTheme.neonCyan, radius: 4, opacity: 0.6)
+                            .neonGlow(color: Color.white, radius: 4, opacity: 0.5)
                     }
                 }
                 .frame(height: 2.5)

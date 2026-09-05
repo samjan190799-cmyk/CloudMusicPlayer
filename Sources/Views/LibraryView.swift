@@ -27,27 +27,8 @@ struct LibraryView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Глубокий неоново-фиолетовый космический градиент на фоне
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.22, green: 0.18, blue: 0.45),
-                        Color(red: 0.12, green: 0.08, blue: 0.28),
-                        Color(red: 0.06, green: 0.04, blue: 0.16)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                // Мягкое анимированное нежное свечение на фоне
-                GeometryReader { proxy in
-                    Circle()
-                        .fill(Color(red: 0.45, green: 0.2, blue: 0.9).opacity(0.28))
-                        .blur(radius: 80)
-                        .frame(width: proxy.size.width * 0.9)
-                        .offset(x: -40, y: -60)
-                }
-                .ignoresSafeArea()
+                // Глубокий обсидиановый фон
+                AmbientBackgroundView()
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 28) {
@@ -165,12 +146,12 @@ struct LibraryView: View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(Color.purple.opacity(0.2))
+                    .fill(Color.white.opacity(0.10))
                     .frame(width: 50, height: 50)
                 
                 Image(systemName: "music.note.list")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.purple)
+                    .foregroundColor(.white)
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -189,10 +170,10 @@ struct LibraryView: View {
                 showingCreatePlaylistAlert = true
             }
             .font(.system(size: 13, weight: .bold))
-            .foregroundColor(.cyan)
+            .foregroundColor(.black)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Color.cyan.opacity(0.15))
+            .background(Color.white)
             .clipShape(Capsule())
         }
         .padding(16)
@@ -438,17 +419,11 @@ private struct LibraryPlaylistCardView: View {
                 
                 ZStack {
                     Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.65, green: 0.3, blue: 1.0), Color(red: 0.45, green: 0.2, blue: 0.9)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(Color.white)
                     
                     Image(systemName: "play.fill")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .offset(x: 1)
                 }
                 .frame(width: 36, height: 36)

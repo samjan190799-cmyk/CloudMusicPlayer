@@ -17,11 +17,8 @@ struct ContentView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Динамический глубокий фиолетово-космический фон
-            AmbientBackgroundView(
-                accentColor: Color(red: 0.45, green: 0.25, blue: 0.95),
-                secondaryColor: Color(red: 0.15, green: 0.45, blue: 0.95)
-            )
+            // Динамический глубокий обсидиановый фон
+            AmbientBackgroundView()
             
             // Контент активной вкладки
             Group {
@@ -105,18 +102,18 @@ struct ContentView: View {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color(red: 0.3, green: 0.5, blue: 1.0), Color(red: 0.6, green: 0.25, blue: 1.0)],
+                                    colors: [Color.white, Color(white: 0.86)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
                             .frame(width: 34, height: 34)
-                            .shadow(color: Color(red: 0.4, green: 0.3, blue: 1.0).opacity(0.6), radius: 10, x: 0, y: 2)
+                            .shadow(color: Color.white.opacity(0.35), radius: 8, x: 0, y: 1)
                     }
                     
                     Image(systemName: icon)
                         .font(.system(size: 15, weight: isSelected ? .bold : .medium))
-                        .foregroundColor(isSelected ? .white : Color.white.opacity(0.45))
+                        .foregroundColor(isSelected ? .black : Color.white.opacity(0.45))
                 }
                 .frame(height: 28)
                 
