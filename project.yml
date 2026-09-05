@@ -1,6 +1,6 @@
 name: CloudMusicPlayer
 options:
-  bundleIdPrefix: com.samvel.cloudmusicplayer
+  bundleIdPrefix: com.samvel.cloudmusicplayer.V7J345DY58
 packages:
   YouTubeKit:
     url: https://github.com/alexeichhorn/YouTubeKit
@@ -26,7 +26,7 @@ targets:
       properties:
         CFBundleName: CloudMusicPlayer
         CFBundleDisplayName: CloudMusicPlayer
-        CFBundleIdentifier: com.samvel.cloudmusicplayer
+        CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58
         CFBundleVersion: "1"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: APPL
@@ -62,7 +62,7 @@ targets:
       properties:
         CFBundleName: CloudMusicPlayerWidget
         CFBundleDisplayName: Player Widget
-        CFBundleIdentifier: com.samvel.cloudmusicplayer.widget
+        CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58.widget
         CFBundleVersion: "1"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: "XPC!"
@@ -71,7 +71,7 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "5.9"
-        PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.V7J345DY58.widget
         PRODUCT_NAME: CloudMusicPlayerWidget
         SKIP_INSTALL: "YES"
         APPLICATION_EXTENSION_API_ONLY: "YES"
