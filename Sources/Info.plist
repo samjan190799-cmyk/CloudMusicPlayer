@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>CloudMusicPlayer</string>
+    <string>CloudPlayer</string>
     <key>CFBundleDisplayName</key>
-    <string>CloudMusicPlayer</string>
+    <string>CloudPlayer</string>
     <key>CFBundleIdentifier</key>
-    <string>com.samvel.cloudmusicplayer</string>
+    <string>com.samvel.cloudmusicplayer.V7J345DY58</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>

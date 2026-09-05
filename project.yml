@@ -24,8 +24,8 @@ targets:
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleName: CloudMusicPlayer
-        CFBundleDisplayName: CloudMusicPlayer
+        CFBundleName: CloudPlayer
+        CFBundleDisplayName: CloudPlayer
         CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58
         CFBundleVersion: "1"
         CFBundleShortVersionString: "1.0"
