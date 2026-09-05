@@ -835,8 +835,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
         }
         
         // Toggle Play/Pause command (нажатие на AirPods / Bluetooth-гарнитуру)
-        commandCenter.togglePlayPauseMusicCommand.isEnabled = true
-        commandCenter.togglePlayPauseMusicCommand.addTarget { [weak self] _ in
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
             self?.togglePlayPause()
             return .success
         }
