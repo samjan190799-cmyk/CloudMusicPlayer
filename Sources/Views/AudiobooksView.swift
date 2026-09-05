@@ -229,12 +229,49 @@ struct AudiobooksView: View {
             
             Spacer()
             
-            Button(action: {
-                playAudiobook(track)
-            }) {
-                Image(systemName: isPlayingThis ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundColor(AppTheme.neonPurple)
+            HStack(spacing: 8) {
+                let isDownloaded = DownloadManager.shared.isDownloaded(trackId: track.id)
+                
+                Button(action: {
+                    HapticManager.shared.triggerImpact(style: .medium)
+                    if !isDownloaded {
+                        DownloadManager.shared.downloadYouTubeTrack(track)
+                    }
+                }) {
+                    Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(isDownloaded ? .cyan : AppTheme.textSecondary)
+                }
+                .buttonStyle(SpringScaleButtonStyle())
+                
+                Button(action: {
+                    HapticManager.shared.triggerSelection()
+                    selectedTrackForPlaylist = PlaylistTrack(
+                        id: track.id,
+                        title: track.title,
+                        artist: track.uploader,
+                        sourceName: "Аудиокниги",
+                        localRelativePath: nil,
+                        remoteURLString: nil,
+                        googleFileId: nil,
+                        localCoverPath: nil,
+                        duration: Double(track.duration)
+                    )
+                }) {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(AppTheme.textSecondary)
+                }
+                .buttonStyle(SpringScaleButtonStyle())
+                
+                Button(action: {
+                    playAudiobook(track)
+                }) {
+                    Image(systemName: isPlayingThis ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(AppTheme.neonPurple)
+                }
+                .buttonStyle(SpringScaleButtonStyle())
             }
         }
         .padding(12)

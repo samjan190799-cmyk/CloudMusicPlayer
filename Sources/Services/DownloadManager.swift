@@ -560,18 +560,32 @@ extension UIImage {
     }
 }
 
-// MARK: - Конвертация LocalTrack -> PlaylistTrack
+// MARK: - Конвертация LocalTrack -> PlaylistTrack & PlayerTrack
 extension LocalTrack {
-    func toPlaylistTrack() -> PlaylistTrack {
+    func toPlaylistTrack(customSourceName: String? = nil) -> PlaylistTrack {
         PlaylistTrack(
             id: id,
             title: title,
             artist: artist ?? source.displayName,
-            sourceName: source.displayName,
+            sourceName: customSourceName ?? source.displayName,
             localRelativePath: relativePath,
             remoteURLString: nil,
             googleFileId: nil,
             localCoverPath: localCoverPath,
+            duration: duration
+        )
+    }
+    
+    func toPlayerTrack(customSourceName: String? = nil) -> PlayerTrack {
+        PlayerTrack(
+            id: id,
+            title: title,
+            artist: artist ?? source.displayName,
+            sourceName: customSourceName ?? source.displayName,
+            localURL: localURL,
+            remoteURL: nil,
+            googleFileId: nil,
+            localCoverURL: localCoverURL,
             duration: duration
         )
     }

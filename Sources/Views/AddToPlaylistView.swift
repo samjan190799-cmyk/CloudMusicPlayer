@@ -31,14 +31,31 @@ struct AddToPlaylistView: View {
                         
                         HStack(spacing: 12) {
                             ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(LinearGradient(colors: [.purple, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .frame(width: 48, height: 48)
-                                    .opacity(0.8)
-                                
-                                Image(systemName: "music.note")
-                                    .foregroundColor(.white)
-                                    .font(.title3)
+                                if let coverURL = track.localCoverURL,
+                                   let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 48, height: 48)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+                                    RemoteCoverLoader(
+                                        trackId: track.id,
+                                        sourceName: track.sourceName,
+                                        width: 48,
+                                        height: 48,
+                                        cornerRadius: 10
+                                    )
+                                } else {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(LinearGradient(colors: [.purple, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .frame(width: 48, height: 48)
+                                        .opacity(0.8)
+                                    
+                                    Image(systemName: "music.note")
+                                        .foregroundColor(.white)
+                                        .font(.title3)
+                                }
                             }
                             
                             VStack(alignment: .leading, spacing: 4) {

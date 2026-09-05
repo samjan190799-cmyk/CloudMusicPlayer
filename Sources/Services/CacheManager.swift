@@ -181,11 +181,17 @@ extension CacheManager: URLSessionDownloadDelegate {
             
             try FileManager.default.moveItem(at: location, to: destinationURL)
             
+            var actualSize = size
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: destinationURL.path),
+               let sizeValue = attributes[.size] as? Int64, sizeValue > 0 {
+                actualSize = sizeValue
+            }
+            
             let newItem = CacheMetadata(
                 id: trackId,
                 title: title,
                 relativePath: safeFileName,
-                size: size,
+                size: actualSize,
                 lastAccessed: Date()
             )
             

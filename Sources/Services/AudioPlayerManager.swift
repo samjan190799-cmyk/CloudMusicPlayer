@@ -305,8 +305,13 @@ class AudioPlayerManager: NSObject, ObservableObject {
             } else {
                 timer.invalidate()
                 self.sleepTimerTimeRemaining = nil
-                self.togglePlayPause() // Плавная пауза по истечении таймера
+                if self.playbackState == .playing {
+                    self.togglePlayPause() // Плавная пауза по истечении таймера
+                }
             }
+        }
+        if let timer = sleepTimer {
+            RunLoop.main.add(timer, forMode: .common)
         }
     }
 
@@ -387,17 +392,20 @@ class AudioPlayerManager: NSObject, ObservableObject {
         // 5. Запрос ссылки на ходу для Яндекса
         else if track.sourceName.contains("Яндекс") || track.sourceName == "Yandex" {
             YandexDiskService.shared.getDownloadUrl(forPath: track.id) { [weak self] downloadUrl in
+                guard let self = self else { return }
+                guard self.currentTrack?.id == track.id else { return }
                 guard let downloadUrl = downloadUrl else {
                     DispatchQueue.main.async {
-                        self?.playbackState = .stopped
-                        self?.endBackgroundTask()
+                        self.playbackState = .stopped
+                        self.endBackgroundTask()
                     }
                     return
                 }
                 DispatchQueue.main.async {
+                    guard self.currentTrack?.id == track.id else { return }
                     let item = AVPlayerItem(url: downloadUrl)
-                    self?.setupPlayer(with: item, track: track)
-                    self?.triggerCaching(for: track)
+                    self.setupPlayer(with: item, track: track)
+                    self.triggerCaching(for: track)
                 }
             }
             return
@@ -408,6 +416,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
             
             YouTubeService.shared.getAudioURL(for: track.id) { [weak self] audioUrl in
                 guard let self = self else { return }
+                guard self.currentTrack?.id == track.id else { return }
                 
                 if let audioUrl = audioUrl {
                     print("AudioPlayer: получен аудио URL: \(audioUrl.absoluteString.prefix(100))...")
@@ -425,6 +434,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     item.preferredForwardBufferDuration = 3 // Минимальная задержка предбуферизации
                     
                     DispatchQueue.main.async {
+                        guard self.currentTrack?.id == track.id else { return }
                         try? AVAudioSession.sharedInstance().setActive(true)
                         self.setupPlayer(with: item, track: track)
                         self.triggerCaching(for: track)
@@ -432,6 +442,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 } else {
                     print("AudioPlayer: ОШИБКА — не удалось получить аудио URL для трека \(track.id)")
                     DispatchQueue.main.async {
+                        guard self.currentTrack?.id == track.id else { return }
                         self.playbackState = .stopped
                         self.endBackgroundTask()
                     }
@@ -789,6 +800,13 @@ class AudioPlayerManager: NSObject, ObservableObject {
             return .commandFailed
         }
         
+        // Toggle Play/Pause command (нажатие на AirPods / Bluetooth-гарнитуру)
+        commandCenter.togglePlayPauseMusicCommand.isEnabled = true
+        commandCenter.togglePlayPauseMusicCommand.addTarget { [weak self] _ in
+            self?.togglePlayPause()
+            return .success
+        }
+        
         // Next command
         commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
@@ -800,6 +818,22 @@ class AudioPlayerManager: NSObject, ObservableObject {
         commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             self?.previousTrack()
+            return .success
+        }
+        
+        // Skip Forward (30 сек для аудиокниг и подкастов)
+        commandCenter.skipForwardCommand.preferredIntervals = [30]
+        commandCenter.skipForwardCommand.isEnabled = true
+        commandCenter.skipForwardCommand.addTarget { [weak self] _ in
+            self?.skipForward30()
+            return .success
+        }
+        
+        // Skip Backward (15 сек для аудиокниг и подкастов)
+        commandCenter.skipBackwardCommand.preferredIntervals = [15]
+        commandCenter.skipBackwardCommand.isEnabled = true
+        commandCenter.skipBackwardCommand.addTarget { [weak self] _ in
+            self?.skipBackward15()
             return .success
         }
         

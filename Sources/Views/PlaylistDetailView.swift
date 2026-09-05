@@ -205,6 +205,14 @@ struct PlaylistDetailView: View {
                                         .scaledToFill()
                                         .frame(width: 46, height: 46)
                                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                } else if playlistTrack.sourceName.contains("YouTube") || playlistTrack.sourceName == "Аудиокниги" {
+                                    RemoteCoverLoader(
+                                        trackId: playlistTrack.id,
+                                        sourceName: playlistTrack.sourceName,
+                                        width: 46,
+                                        height: 46,
+                                        cornerRadius: 12
+                                    )
                                 } else {
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                                         .fill(placeholderGradient(for: playlistTrack.title))

@@ -104,7 +104,7 @@ struct CloudView: View {
                         .frame(width: 90, height: 90)
                         .blur(radius: 12)
 
-                    Image(systemName: source == .google ? "logo.googledrive" : "y.circle.fill")
+                    Image(systemName: source == .google ? "externaldrive.fill.badge.icloud" : "y.circle.fill")
                         .font(.system(size: 64, weight: .bold))
                         .foregroundStyle(
                             LinearGradient(

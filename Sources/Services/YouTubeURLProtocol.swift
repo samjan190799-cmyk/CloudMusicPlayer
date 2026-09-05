@@ -4,6 +4,7 @@ class YouTubeURLProtocol: URLProtocol {
     
     private var activeTask: URLSessionDataTask?
     private static let visitorDataKey = "com.samvel.cloudmusicplayer.visitorData"
+    private static let internalSession = URLSession(configuration: .default)
     
     override class func canInit(with request: URLRequest) -> Bool {
         guard let url = request.url else { return false }
@@ -39,8 +40,7 @@ class YouTubeURLProtocol: URLProtocol {
         // Подставляем стабильный User-Agent для мобильного Safari
         mutableRequest.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         
-        let session = URLSession(configuration: .default)
-        activeTask = session.dataTask(with: mutableRequest as URLRequest) { [weak self] data, response, error in
+        activeTask = Self.internalSession.dataTask(with: mutableRequest as URLRequest) { [weak self] data, response, error in
             guard let self = self else { return }
             
             if let error = error {

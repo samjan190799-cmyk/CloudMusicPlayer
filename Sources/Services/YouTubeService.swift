@@ -701,5 +701,31 @@ struct InvidiousSearchResult: Codable {
     let title: String
     let author: String
     let lengthSeconds: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case videoId, title, author, lengthSeconds
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        videoId = (try? container.decode(String.self, forKey: .videoId)) ?? ""
+        title = (try? container.decode(String.self, forKey: .title)) ?? "YouTube Track"
+        author = (try? container.decode(String.self, forKey: .author)) ?? "YouTube"
+        
+        if let sec = try? container.decode(Int.self, forKey: .lengthSeconds) {
+            lengthSeconds = sec
+        } else if let secStr = try? container.decode(String.self, forKey: .lengthSeconds), let sec = Int(secStr) {
+            lengthSeconds = sec
+        } else {
+            lengthSeconds = 0
+        }
+    }
+    
+    init(videoId: String, title: String, author: String, lengthSeconds: Int) {
+        self.videoId = videoId
+        self.title = title
+        self.author = author
+        self.lengthSeconds = lengthSeconds
+    }
 }
 

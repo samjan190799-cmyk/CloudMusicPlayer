@@ -336,15 +336,7 @@ struct DownloadsView: View {
                 playLocalTrack(track)
             },
             onAddToPlaylist: {
-                selectedTrackForPlaylist = PlaylistTrack(
-                    id: track.id,
-                    title: track.title,
-                    artist: track.artist ?? "Скачанный трек",
-                    sourceName: "Загрузки",
-                    localRelativePath: track.relativePath,
-                    remoteURLString: nil,
-                    googleFileId: nil
-                )
+                selectedTrackForPlaylist = track.toPlaylistTrack(customSourceName: "Загрузки")
             },
             onDelete: {
                 withAnimation {
@@ -398,15 +390,7 @@ struct DownloadsView: View {
     
     private func playLocalTrack(_ track: LocalTrack) {
         let allPlayerTracks = filteredTracks.map {
-            PlayerTrack(
-                id: $0.id,
-                title: $0.title,
-                artist: $0.artist ?? "Скачанный трек",
-                sourceName: "Загрузки",
-                localURL: $0.localURL,
-                remoteURL: nil,
-                googleFileId: nil
-            )
+            $0.toPlayerTrack(customSourceName: "Загрузки")
         }
         if let target = allPlayerTracks.first(where: { $0.id == track.id }) {
             playerManager.play(track: target, in: allPlayerTracks)

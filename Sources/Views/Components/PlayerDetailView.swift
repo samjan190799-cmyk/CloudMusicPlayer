@@ -381,7 +381,7 @@ struct PlayerDetailView: View {
                     HStack {
                         Spacer()
                         HStack(spacing: 4) {
-                            Image(systemName: "badge.plus.radiowaves.right")
+                            Image(systemName: "badge.plus.radiowaves.forward")
                             Text("Dolby Atmos")
                         }
                         .font(.system(size: 10, weight: .bold))

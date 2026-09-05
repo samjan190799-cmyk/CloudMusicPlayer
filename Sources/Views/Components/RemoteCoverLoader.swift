@@ -141,8 +141,12 @@ struct RemoteCoverLoader: View {
                 
                 guard let http = response as? HTTPURLResponse,
                       http.statusCode == 200,
-                      let img = UIImage(data: data),
-                      img.size.width > 120 else {
+                      let img = UIImage(data: data) else {
+                    continue
+                }
+                
+                // Для maxresdefault проверяем, что YouTube не вернул 120x90 заглушку
+                if urlStr.contains("maxresdefault") && img.size.width <= 120 {
                     continue
                 }
                 
@@ -182,7 +186,7 @@ struct AnyShape: Shape {
 /// Возвращает результат через completion-handler (не SwiftUI).
 enum RemoteCoverUtility {
     
-    private static let urlChain: [String] = ["maxresdefault", "hqdefault", "mqdefault"]
+    private static let urlChain: [String] = ["maxresdefault", "hqdefault", "mqdefault", "sddefault"]
     
     /// Асинхронно загружает обложку YouTube-трека. Кеширует через `ThumbnailCache`.
     static func loadCover(for videoId: String, completion: @escaping (UIImage?) -> Void) {
@@ -204,8 +208,12 @@ enum RemoteCoverUtility {
                     
                     guard let http = response as? HTTPURLResponse,
                           http.statusCode == 200,
-                          let img = UIImage(data: data),
-                          img.size.width > 120 else {
+                          let img = UIImage(data: data) else {
+                        continue
+                    }
+                    
+                    // Для maxresdefault проверяем, что YouTube не вернул 120x90 заглушку
+                    if quality == "maxresdefault" && img.size.width <= 120 {
                         continue
                     }
                     

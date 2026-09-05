@@ -294,39 +294,15 @@ struct LibraryView: View {
             },
             onAddToPlaylist: {
                 HapticManager.shared.triggerSelection()
-                selectedTrackForPlaylist = PlaylistTrack(
-                    id: track.id,
-                    title: track.title,
-                    artist: track.artist ?? "Неизвестный исполнитель",
-                    sourceName: "Медиатека",
-                    localRelativePath: track.relativePath,
-                    remoteURLString: nil,
-                    googleFileId: nil
-                )
+                selectedTrackForPlaylist = track.toPlaylistTrack(customSourceName: "Медиатека")
             }
         )
     }
     
     private func playTrack(_ track: LocalTrack) {
-        let playerTrack = PlayerTrack(
-            id: track.id,
-            title: track.title,
-            artist: track.artist ?? "Неизвестный исполнитель",
-            sourceName: "Медиатека",
-            localURL: track.localURL,
-            remoteURL: nil,
-            googleFileId: nil
-        )
+        let playerTrack = track.toPlayerTrack(customSourceName: "Медиатека")
         let allPlayerTracks = filteredLocalTracks.map {
-            PlayerTrack(
-                id: $0.id,
-                title: $0.title,
-                artist: $0.artist ?? "Неизвестный исполнитель",
-                sourceName: "Медиатека",
-                localURL: $0.localURL,
-                remoteURL: nil,
-                googleFileId: nil
-            )
+            $0.toPlayerTrack(customSourceName: "Медиатека")
         }
         playerManager.play(track: playerTrack, in: allPlayerTracks)
     }
@@ -437,7 +413,7 @@ private struct LibraryPlaylistCardView: View {
                         endPoint: .bottomTrailing
                     )
                     
-                    Image(systemName: playlist.id == PlaylistManager.favoritesUUID ? "heart.fill" : "music.quaver.at.rectangle.fill")
+                    Image(systemName: playlist.id == PlaylistManager.favoritesUUID ? "heart.fill" : "music.note.list")
                         .font(.system(size: 60))
                         .foregroundColor(.white.opacity(0.18))
                 }

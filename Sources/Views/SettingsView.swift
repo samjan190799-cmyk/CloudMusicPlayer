@@ -39,7 +39,7 @@ struct SettingsView: View {
                         // 1. Секция Google Диск
                         VStack(alignment: .leading, spacing: 14) {
                             HStack {
-                                Image(systemName: "logo.googledrive")
+                                Image(systemName: "externaldrive.fill.badge.icloud")
                                     .foregroundColor(.purple)
                                     .font(.title3)
                                 Text("Настройка Google Диска")

@@ -185,12 +185,12 @@ class PlaylistManager: ObservableObject {
             
             let autoDownload = UserDefaults.standard.object(forKey: "autoDownloadFavorites") as? Bool ?? true
             if autoDownload && !DownloadManager.shared.isDownloaded(trackId: track.id) {
-                if track.sourceName == "YouTube" {
+                if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
                     let ytTrack = YouTubeTrack(
                         id: track.id,
                         title: track.title,
                         uploader: track.artist,
-                        duration: 0,
+                        duration: Int(track.duration ?? 0),
                         thumbnailUrl: "https://img.youtube.com/vi/\(track.id)/hqdefault.jpg"
                     )
                     DownloadManager.shared.downloadYouTubeTrack(ytTrack)
