@@ -37,6 +37,7 @@ targets:
         CFBundleIconName: AppIcon
         UIBackgroundModes:
           - audio
+        ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         SWIFT_VERSION: "5.9"
