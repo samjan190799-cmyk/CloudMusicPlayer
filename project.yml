@@ -27,7 +27,7 @@ targets:
         CFBundleName: CloudPlayer
         CFBundleDisplayName: CloudPlayer
         CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58
-        CFBundleVersion: "3"
+        CFBundleVersion: "4"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: APPL
         CFBundleExecutable: CloudMusicPlayer
@@ -38,20 +38,22 @@ targets:
         UIBackgroundModes:
           - audio
         ITSAppUsesNonExemptEncryption: false
+        NSAppleMusicUsageDescription: "Разрешите доступ к медиатеке для прослушивания локальных аудиофайлов и треков Apple Music."
     settings:
-      base:
-        SWIFT_VERSION: "5.9"
-        PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.V7J345DY58
-        ALWAYS_SEARCH_USER_PATHS: "NO"
-        PRODUCT_NAME: CloudMusicPlayer
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ASSETCATALOG_COMPILER_PRIMARY_APPICON_SET_NAME: AppIcon
-        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: "YES"
-        DEVELOPMENT_TEAM: V7J345DY58
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_REQUIRED: "YES"
-        CODE_SIGNING_ALLOWED: "YES"
-        GENERATE_INFOPLIST_FILE: "NO"
+      SWIFT_VERSION: "5.9"
+      PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.V7J345DY58
+      ALWAYS_SEARCH_USER_PATHS: "NO"
+      PRODUCT_NAME: CloudMusicPlayer
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      ASSETCATALOG_COMPILER_PRIMARY_APPICON_SET_NAME: AppIcon
+      ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: "YES"
+      DEVELOPMENT_TEAM: V7J345DY58
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGNING_REQUIRED: "YES"
+      CODE_SIGNING_ALLOWED: "YES"
+      GENERATE_INFOPLIST_FILE: "NO"
+      INFOPLIST_FILE: Sources/Info.plist
+      INFOPLIST_KEY_NSAppleMusicUsageDescription: "Разрешите доступ к медиатеке для прослушивания локальных аудиофайлов и треков Apple Music."
 
   CloudMusicPlayerWidget:
     type: app-extension
@@ -65,20 +67,20 @@ targets:
         CFBundleName: CloudMusicPlayerWidget
         CFBundleDisplayName: Player Widget
         CFBundleIdentifier: com.samvel.cloudmusicplayer.V7J345DY58.widget
-        CFBundleVersion: "3"
+        CFBundleVersion: "4"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: "XPC!"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
-      base:
-        SWIFT_VERSION: "5.9"
-        PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.V7J345DY58.widget
-        PRODUCT_NAME: CloudMusicPlayerWidget
-        SKIP_INSTALL: "YES"
-        APPLICATION_EXTENSION_API_ONLY: "YES"
-        DEVELOPMENT_TEAM: V7J345DY58
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_REQUIRED: "YES"
-        CODE_SIGNING_ALLOWED: "YES"
-        GENERATE_INFOPLIST_FILE: "NO"
+      SWIFT_VERSION: "5.9"
+      PRODUCT_BUNDLE_IDENTIFIER: com.samvel.cloudmusicplayer.V7J345DY58.widget
+      PRODUCT_NAME: CloudMusicPlayerWidget
+      SKIP_INSTALL: "YES"
+      APPLICATION_EXTENSION_API_ONLY: "YES"
+      DEVELOPMENT_TEAM: V7J345DY58
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGNING_REQUIRED: "YES"
+      CODE_SIGNING_ALLOWED: "YES"
+      GENERATE_INFOPLIST_FILE: "NO"
+      INFOPLIST_FILE: Sources/Widget/Info.plist
