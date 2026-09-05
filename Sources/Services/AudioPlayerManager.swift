@@ -356,6 +356,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
         player?.pause()
         removeTimeObserver()
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemPlaybackStalled, object: nil)
         
         // Активация аудиосессии перед началом воспроизведения
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -524,11 +526,23 @@ class AudioPlayerManager: NSObject, ObservableObject {
 
 
         
-        // Наблюдатели за окончанием трека
+        // Наблюдатели за окончанием трека и сетевыми сбоями
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(playerItemDidReachEnd),
             name: .AVPlayerItemDidPlayToEndTime,
+            object: item
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerItemFailedToPlayToEndTime(_:)),
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: item
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerItemPlaybackStalled(_:)),
+            name: .AVPlayerItemPlaybackStalled,
             object: item
         )
         
@@ -680,6 +694,26 @@ class AudioPlayerManager: NSObject, ObservableObject {
             } else {
                 self.nextTrack()
             }
+        }
+    }
+    
+    @objc private func playerItemFailedToPlayToEndTime(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let current = self.currentTrack else { return }
+            print("AudioPlayerManager: ⚠️ Сбой стриминга (FailedToPlayToEndTime) для трека \(current.title)")
+            if current.sourceName.contains("YouTube") || current.sourceName == "Аудиокниги" {
+                YouTubeService.shared.invalidateStreamCache(for: current.id)
+            }
+            self.retryPlayback(track: current)
+        }
+    }
+    
+    @objc private func playerItemPlaybackStalled(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            print("AudioPlayerManager: ⏳ Воспроизведение подвисло (PlaybackStalled), ожидание буфера...")
+            self.isBuffering = true
+            self.player?.play()
         }
     }
     

@@ -74,8 +74,12 @@ struct YouTubeThumbnail: View {
 
                 guard let http = response as? HTTPURLResponse,
                       http.statusCode == 200,
-                      let img = UIImage(data: data),
-                      img.size.width > 120 else {
+                      let img = UIImage(data: data) else {
+                    continue
+                }
+                
+                // Для maxresdefault проверяем, что YouTube не вернул 120x90 заглушку
+                if urlStr.contains("maxresdefault") && img.size.width <= 120 {
                     continue
                 }
 

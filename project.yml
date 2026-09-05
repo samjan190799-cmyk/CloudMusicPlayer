@@ -4,7 +4,7 @@ options:
 packages:
   YouTubeKit:
     url: https://github.com/alexeichhorn/YouTubeKit
-    from: "0.3.0"
+    from: "0.4.9"
 targets:
   CloudMusicPlayer:
     type: application

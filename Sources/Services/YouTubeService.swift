@@ -65,6 +65,7 @@ class YouTubeService: ObservableObject {
 
     private var currentQuery = ""
     private var currentPage = 1
+    private var continuationToken: String? = nil
     private var searchTask: Task<Void, Never>?
     private var trendingTask: Task<Void, Never>?
 
@@ -73,19 +74,13 @@ class YouTubeService: ObservableObject {
     private let cacheLock = NSLock()
     private let streamTTL: TimeInterval = 3600 // 1 час (исключает 403 Forbidden из-за просроченных ссылок)
 
-    // Список проверенных Invidious-инстансов (актуальные зеркала)
+    // Список проверенных Invidious-инстансов (актуальные зеркала 2026 года)
     private let apiInstances = [
+        "https://invidious.flokinet.to",
         "https://inv.nadeko.net",
         "https://yewtu.be",
-        "https://invidious.nerdvpn.de",
-        "https://invidious.flokinet.to",
-        "https://inv.tux.pizza",
-        "https://invidious.drgns.space",
-        "https://invidious.privacydev.net",
         "https://invidious.f5.si",
-        "https://invidious.tiekoetter.com",
-        "https://vid.puffyan.us",
-        "https://invidious.snopyta.org"
+        "https://invidious.nerdvpn.de"
     ]
     
     // Здоровые инстансы (обновляются при health check)
@@ -222,9 +217,9 @@ class YouTubeService: ObservableObject {
                     return await self.fetchAudioFromInvidious(videoId: videoId)
                 }
                 
-                // Таск 3: Таймаут 10 секунд (защита от зависания)
+                // Таск 3: Таймаут 6 секунд (защита от зависания)
                 group.addTask {
-                    try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 сек
+                    try? await Task.sleep(nanoseconds: 6_000_000_000) // 6 сек
                     return nil
                 }
 
@@ -250,61 +245,15 @@ class YouTubeService: ObservableObject {
     }
 
     private func fetchAudioFromInvidious(videoId: String) async -> URL? {
-        // 1. Попытка через Piped API
-        let pipedInstances = [
-            "https://pipedapi.kavin.rocks",
-            "https://api.piped.yt",
-            "https://pipedapi.astral.cool",
-            "https://pipedapi.drgns.space"
-        ]
-        
-        let pipedResult: URL? = await withTaskGroup(of: URL?.self) { group -> URL? in
-            for instance in pipedInstances {
-                group.addTask {
-                    let urlStr = "\(instance)/streams/\(videoId)"
-                    guard let url = URL(string: urlStr) else { return nil }
-                    do {
-                        var request = URLRequest(url: url)
-                        request.timeoutInterval = 2.0
-                        let (data, response) = try await URLSession.shared.data(for: request)
-                        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-                        
-                        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                           let audioStreams = json["audioStreams"] as? [[String: Any]] {
-                            for stream in audioStreams {
-                                if let urlString = stream["url"] as? String, let audioURL = URL(string: urlString) {
-                                    return audioURL
-                                }
-                            }
-                        }
-                    } catch {
-                        return nil
-                    }
-                    return nil
-                }
-            }
-            for await url in group {
-                if let u = url {
-                    group.cancelAll()
-                    return u
-                }
-            }
-            return nil
-        }
-        
-        if let pipedResult = pipedResult {
-            return pipedResult
-        }
-        
-        // 2. Вторичная попытка через Invidious API и прямого аудио-прокси (/latest_version?id=...&itag=140)
+        // Попытка через Invidious API и прямого аудио-прокси (/latest_version?id=...&itag=140)
         return await withTaskGroup(of: URL?.self) { group -> URL? in
-            for instance in self.getActiveInstances().prefix(4) {
+            for instance in self.getActiveInstances().prefix(3) {
                 group.addTask {
                     let proxyStr = "\(instance)/latest_version?id=\(videoId)&itag=140"
                     if let proxyURL = URL(string: proxyStr) {
                         var headReq = URLRequest(url: proxyURL)
                         headReq.httpMethod = "HEAD"
-                        headReq.timeoutInterval = 1.8
+                        headReq.timeoutInterval = 2.0
                         if let (_, resp) = try? await URLSession.shared.data(for: headReq),
                            let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 200 || httpResp.statusCode == 302 {
                             return proxyURL
@@ -315,7 +264,7 @@ class YouTubeService: ObservableObject {
                     guard let url = URL(string: urlStr) else { return nil }
                     do {
                         var request = URLRequest(url: url)
-                        request.timeoutInterval = 2.0
+                        request.timeoutInterval = 2.5
                         let (data, response) = try await URLSession.shared.data(for: request)
                         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
 
@@ -351,13 +300,14 @@ class YouTubeService: ObservableObject {
     // MARK: - Валидация Музыкального Контента (Строгая Фильтрация)
 
     private func isMusicTrack(_ item: InvidiousSearchResult) -> Bool {
-        // 1. Фильтр длительности: только песни от 50 секунд до 8 минут (480 сек)
-        guard item.lengthSeconds >= 50 && item.lengthSeconds <= 480 else { return false }
+        // 1. Фильтр длительности: только треки от 40 секунд до 12 минут (720 сек)
+        guard item.lengthSeconds >= 40 && item.lengthSeconds <= 720 else { return false }
         
         let title = item.title.lowercased()
         let author = item.author.lowercased()
         
         // 2. Черный список ключевых слов (игры, киберспорт, проповеди, комедии, подкасты, стримы)
+        // Замечание: убраны обычные музыкальные слова ("show", "vs", "match", "talk")
         let forbiddenKeywords = [
             "cs:go", "cs2", "blast", "gameplay", "walkthrough", "lets play", "let's play",
             "gaming", "rust", "pubg", "dota", "dota 2", "minecraft", "apex", "valorant",
@@ -366,7 +316,7 @@ class YouTubeService: ObservableObject {
             "episode", "ep.", "highlights", "reaction", "review", "vlog", "movie",
             "film", "trailer", "asmr", "interview", "documentary", "tutorial", "lesson",
             "preaching", "prayer", "command your morning", "day 1", "day 2", "day 3",
-            "streamer", "twitch", "match", "vs", "versus", "comedy", "show", "talk"
+            "streamer", "twitch", "versus", "comedy"
         ]
         
         for keyword in forbiddenKeywords {
@@ -380,19 +330,18 @@ class YouTubeService: ObservableObject {
 
     /// Строгая фильтрация ТОЛЬКО сольных треков для Чартов (исключает 1-часовые сборки, миксы, топы)
     private func isSingleSongTrack(_ item: InvidiousSearchResult) -> Bool {
-        // 1. Длительность одиночной песни: от 70 секунд до 360 секунд (6 минут max)
-        guard item.lengthSeconds >= 70 && item.lengthSeconds <= 360 else { return false }
+        // 1. Длительность одиночной песни: от 40 секунд до 600 секунд (10 минут max)
+        guard item.lengthSeconds >= 40 && item.lengthSeconds <= 600 else { return false }
         
         let title = item.title.lowercased()
         let author = item.author.lowercased()
         
-        // 2. Исключение сборок, миксов, подборок "Top 50", "Compilation"
+        // 2. Исключение сборок, миксов, подборок "Top 50", "Compilation", дискографий
         let compilationKeywords = [
             "top 50", "top 100", "top 20", "top 10", "top 30", "top 40",
             "top songs", "best songs", "best of", "compilation", "сборник",
-            "микс", "mix", "megamix", "плейлист", "playlist", "full album",
-            "full audio", "greatest hits", "discography", "дискография",
-            "хиты 20", "песни 20", "mashup", "reverb", "speed up"
+            "megamix", "full album", "full audio", "дискография", "discography",
+            "1 hour", "10 hours", "1 hour loop", "10 hours loop"
         ]
         
         for keyword in compilationKeywords {
@@ -555,6 +504,7 @@ class YouTubeService: ObservableObject {
         searchTask?.cancel()
         currentQuery = q
         currentPage = 1
+        continuationToken = nil
 
         DispatchQueue.main.async {
             self.isLoading = true
@@ -564,28 +514,80 @@ class YouTubeService: ObservableObject {
 
         searchTask = Task { [weak self] in
             guard let self else { return }
+            
+            // 1. Быстрый нативный InnerTube поиск (< 300 мс от серверов YouTube)
+            if let innerTube = await self.searchInnerTube(query: q) {
+                await MainActor.run {
+                    self.isLoading = false
+                    if !innerTube.tracks.isEmpty {
+                        self.tracks = innerTube.tracks
+                        self.continuationToken = innerTube.nextToken
+                        self.canLoadMore = innerTube.nextToken != nil || innerTube.tracks.count >= 15
+                        self.errorMessage = nil
+                    } else {
+                        self.tracks = []
+                        self.canLoadMore = false
+                        self.errorMessage = "Ничего не найдено. Попробуйте другой запрос."
+                    }
+                }
+                return
+            }
+            
+            // 2. Резервный поиск через Invidious-зеркала
             await self.parallelSearch(query: q, page: 1, appending: false)
         }
     }
 
     func loadMore() {
         guard !isLoading, !currentQuery.isEmpty, canLoadMore else { return }
-        let nextPage = currentPage + 1
         let query = currentQuery
+        let nextToken = continuationToken
+        let nextPage = currentPage + 1
 
         DispatchQueue.main.async { self.isLoading = true }
 
         searchTask?.cancel()
         searchTask = Task { [weak self] in
             guard let self else { return }
+            
+            // 1. Если есть continuationToken для InnerTube — используем его
+            if let token = nextToken {
+                if let innerTube = await self.searchInnerTube(query: query, continuationToken: token) {
+                    await MainActor.run {
+                        self.isLoading = false
+                        self.tracks.append(contentsOf: innerTube.tracks)
+                        self.continuationToken = innerTube.nextToken
+                        self.canLoadMore = innerTube.nextToken != nil
+                    }
+                    return
+                }
+            }
+            
+            // 2. Фолбек на пагинацию Invidious
             await self.parallelSearch(query: query, page: nextPage, appending: true)
         }
     }
 
     private func searchRaw(query: String, page: Int) async -> [InvidiousSearchResult]? {
+        // 1. Сначала пробуем нативный быстрый InnerTube
+        if let innerTube = await searchInnerTube(query: query) {
+            let converted = innerTube.tracks.map { track in
+                InvidiousSearchResult(
+                    videoId: track.id,
+                    title: track.title,
+                    author: track.uploader,
+                    lengthSeconds: track.duration
+                )
+            }
+            if !converted.isEmpty {
+                return converted
+            }
+        }
+        
+        // 2. Резервный опрос Invidious через TaskGroup
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         return await withTaskGroup(of: [InvidiousSearchResult]?.self) { group -> [InvidiousSearchResult]? in
-            for instance in getActiveInstances().prefix(4) {
+            for instance in getActiveInstances().prefix(3) {
                 let urlStr = "\(instance)/api/v1/search?q=\(encoded)&type=video&page=\(page)"
                 guard let url = URL(string: urlStr) else { continue }
                 group.addTask { [weak self] () -> [InvidiousSearchResult]? in
@@ -601,6 +603,168 @@ class YouTubeService: ObservableObject {
             }
             return nil
         }
+    }
+
+    // MARK: - Нативный YouTube InnerTube Search API (прямой доступ без зеркал)
+
+    /// Выполняет быстрый нативный поиск через YouTube InnerTube API (без сторонних прокси-серверов)
+    private func searchInnerTube(query: String, continuationToken: String? = nil) async -> (tracks: [YouTubeTrack], nextToken: String?)? {
+        guard let url = URL(string: "https://www.youtube.com/youtubei/v1/search") else { return nil }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 6.0
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://www.youtube.com/", forHTTPHeaderField: "Referer")
+        
+        if let visitorData = UserDefaults.standard.string(forKey: "com.samvel.cloudmusicplayer.visitorData") {
+            request.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
+        
+        var payload: [String: Any] = [
+            "context": [
+                "client": [
+                    "clientName": "WEB",
+                    "clientVersion": "2.20240101.00.00",
+                    "hl": "ru",
+                    "gl": "RU"
+                ]
+            ]
+        ]
+        
+        if let token = continuationToken {
+            payload["continuation"] = token
+        } else {
+            payload["query"] = query
+        }
+        
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        request.httpBody = bodyData
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+            return parseInnerTubeResponse(data: data)
+        } catch {
+            print("YouTubeService: InnerTube error: \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    private func parseInnerTubeResponse(data: Data) -> (tracks: [YouTubeTrack], nextToken: String?)? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        
+        var extractedTracks: [YouTubeTrack] = []
+        var nextContinuationToken: String? = nil
+        
+        // 1. Парсинг первого экрана поиска (contents -> twoColumnSearchResultsRenderer)
+        if let contents = root["contents"] as? [String: Any],
+           let twoCol = contents["twoColumnSearchResultsRenderer"] as? [String: Any],
+           let primary = twoCol["primaryContents"] as? [String: Any],
+           let sectionList = primary["sectionListRenderer"] as? [String: Any],
+           let sections = sectionList["contents"] as? [[String: Any]] {
+            
+            for section in sections {
+                if let itemSection = section["itemSectionRenderer"] as? [String: Any],
+                   let items = itemSection["contents"] as? [[String: Any]] {
+                    for item in items {
+                        if let track = extractTrack(from: item) {
+                            extractedTracks.append(track)
+                        }
+                    }
+                }
+                
+                if let cont = section["continuationItemRenderer"] as? [String: Any],
+                   let endpoint = cont["continuationEndpoint"] as? [String: Any],
+                   let command = endpoint["continuationCommand"] as? [String: Any],
+                   let token = command["token"] as? String {
+                    nextContinuationToken = token
+                }
+            }
+        }
+        
+        // 2. Парсинг страниц пагинации (onResponseReceivedCommands)
+        if let commands = root["onResponseReceivedCommands"] as? [[String: Any]] {
+            for command in commands {
+                if let append = command["appendContinuationItemsAction"] as? [String: Any],
+                   let contItems = append["continuationItems"] as? [[String: Any]] {
+                    for contItem in contItems {
+                        if let itemSection = contItem["itemSectionRenderer"] as? [String: Any],
+                           let items = itemSection["contents"] as? [[String: Any]] {
+                            for item in items {
+                                if let track = extractTrack(from: item) {
+                                    extractedTracks.append(track)
+                                }
+                            }
+                        } else if let track = extractTrack(from: contItem) {
+                            extractedTracks.append(track)
+                        }
+                        
+                        if let cont = contItem["continuationItemRenderer"] as? [String: Any],
+                           let endpoint = cont["continuationEndpoint"] as? [String: Any],
+                           let cmd = endpoint["continuationCommand"] as? [String: Any],
+                           let token = cmd["token"] as? String {
+                            nextContinuationToken = token
+                        }
+                    }
+                }
+            }
+        }
+        
+        return (extractedTracks, nextContinuationToken)
+    }
+    
+    private func extractTrack(from item: [String: Any]) -> YouTubeTrack? {
+        guard let v = item["videoRenderer"] as? [String: Any],
+              let videoId = v["videoId"] as? String, !videoId.isEmpty else {
+            return nil
+        }
+        
+        var title = "YouTube Track"
+        if let titleObj = v["title"] as? [String: Any] {
+            if let runs = titleObj["runs"] as? [[String: Any]], let first = runs.first, let t = first["text"] as? String {
+                title = t
+            } else if let simple = titleObj["simpleText"] as? String {
+                title = simple
+            }
+        }
+        
+        var author = "YouTube"
+        let authorObj = (v["ownerText"] as? [String: Any]) ?? (v["longBylineText"] as? [String: Any])
+        if let aObj = authorObj, let runs = aObj["runs"] as? [[String: Any]], let first = runs.first, let a = first["text"] as? String {
+            author = a
+        }
+        
+        var durationSeconds = 0
+        if let lengthObj = v["lengthText"] as? [String: Any], let s = lengthObj["simpleText"] as? String {
+            durationSeconds = parseDurationString(s)
+        }
+        
+        let thumbUrl = "https://img.youtube.com/vi/\(videoId)/hqdefault.jpg"
+        
+        return YouTubeTrack(
+            id: videoId,
+            title: title,
+            uploader: author,
+            duration: durationSeconds,
+            thumbnailUrl: thumbUrl
+        )
+    }
+    
+    private func parseDurationString(_ string: String) -> Int {
+        let parts = string.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: ":")
+        guard !parts.isEmpty else { return 0 }
+        
+        if parts.count == 3, let h = Int(parts[0]), let m = Int(parts[1]), let s = Int(parts[2]) {
+            return h * 3600 + m * 60 + s
+        } else if parts.count == 2, let m = Int(parts[0]), let s = Int(parts[1]) {
+            return m * 60 + s
+        } else if parts.count == 1, let s = Int(parts[0]) {
+            return s
+        }
+        return 0
     }
 
     private func parallelSearch(query: String, page: Int, appending: Bool) async {
