@@ -131,7 +131,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private func setupAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default, options: [.allowAirPlay])
+            try audioSession.setCategory(.playback, mode: .default, policy: .longFormAudio, options: [.allowAirPlay, .allowBluetooth])
             try audioSession.setActive(true)
             
             // Подписка на прерывания (звонки, будильники)
@@ -433,7 +433,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     ]
                     let asset = AVURLAsset(url: audioUrl, options: assetOptions)
                     let item = AVPlayerItem(asset: asset)
-                    item.preferredForwardBufferDuration = 3 // Минимальная задержка предбуферизации
+                    item.preferredForwardBufferDuration = 30.0 // 30 секунд предбуферизации для стабильного фонового воспроизведения
+                    item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
                     
                     DispatchQueue.main.async {
                         guard self.currentTrack?.id == track.id else { return }
@@ -601,6 +602,18 @@ class AudioPlayerManager: NSObject, ObservableObject {
                         self.player?.play()
                     }
                     print("AudioPlayerManager: ▶️ Буфер заполнен, воспроизведение продолжено")
+                }
+            }
+            .store(in: &cancellables)
+
+        // Наблюдение за временным исчерпанием буфера в фоне (например, при слабом сигнале в кармане)
+        NotificationCenter.default.publisher(for: .AVPlayerItemPlaybackStalled, object: item)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                print("AudioPlayerManager: ⚠️ Буфер временно исчерпан (Stalled), ожидание подкачки данных...")
+                self.isBuffering = true
+                if self.playbackState == .playing {
+                    self.player?.play()
                 }
             }
             .store(in: &cancellables)
