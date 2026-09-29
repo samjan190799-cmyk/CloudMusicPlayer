@@ -343,6 +343,12 @@ struct YouTubeView: View {
                 .padding(.horizontal, 20)
             }
 
+            if service.trendingTracks.isEmpty && !service.isTrendingLoading {
+                retryPlaceholder(message: "Не удалось загрузить чарты") {
+                    service.fetchTrendingMusic()
+                }
+            }
+
             // Горизонтальная карусель Чартов
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
@@ -577,6 +583,10 @@ struct YouTubeView: View {
                     Spacer()
                 }
                 .padding(.vertical, 40)
+            } else if service.tracks.isEmpty, let error = service.errorMessage {
+                retryPlaceholder(message: error) {
+                    performSearch()
+                }
             } else if service.tracks.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "text.magnifyingglass")
@@ -609,11 +619,50 @@ struct YouTubeView: View {
                                 selectedTrackForPlaylist = convertToPlayerTrack(track).toPlaylistTrack()
                             }
                         )
+                        .onAppear {
+                            // Бесконечная прокрутка: догружаем следующую страницу у конца списка
+                            if track.id == service.tracks.last?.id {
+                                service.loadMore()
+                            }
+                        }
+                    }
+
+                    if service.isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .padding(.vertical, 16)
                     }
                 }
                 .padding(.horizontal, 20)
             }
         }
+    }
+
+    private func retryPlaceholder(message: String, action: @escaping () -> Void) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 34))
+                .foregroundColor(AppTheme.textMuted)
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(AppTheme.textMuted)
+                .multilineTextAlignment(.center)
+            Button(action: {
+                HapticManager.shared.triggerImpact(style: .light)
+                action()
+            }) {
+                Text("Повторить")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(Color.white))
+            }
+            .buttonStyle(SpringScaleButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .padding(.horizontal, 20)
     }
 
     // MARK: - Вспомогательные функции
@@ -626,6 +675,13 @@ struct YouTubeView: View {
 
     private func playTrack(_ track: YouTubeTrack) {
         HapticManager.shared.triggerImpact(style: .medium)
+        // Повторный тап по текущему треку — пауза/продолжение, а не перезапуск
+        if playerManager.currentTrack?.id == track.id, playerManager.playbackState != .stopped {
+            if playerManager.playbackState != .loading {
+                playerManager.togglePlayPause()
+            }
+            return
+        }
         let playerTrack = convertToPlayerTrack(track)
         
         let tracksSource: [YouTubeTrack]

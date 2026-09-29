@@ -25,7 +25,7 @@ struct LocalTrack: Identifiable, Codable {
     let id: String
     let title: String
     let source: TrackSource
-    let relativePath: String // Путь относительно директории Documents
+    var relativePath: String // Путь относительно директории Documents
     let size: Int64
     let addedAt: Date
     var artist: String? = nil
@@ -180,9 +180,11 @@ class DownloadManager: NSObject, ObservableObject {
         
         do {
             let data = try Data(contentsOf: libraryURL)
-            let tracks = try JSONDecoder().decode([LocalTrack].self, from: data)
+            var tracks = try JSONDecoder().decode([LocalTrack].self, from: data)
+            let migrated = fixMisnamedAudioFiles(in: &tracks)
             DispatchQueue.main.async {
                 self.localTracks = tracks
+                if migrated { self.saveLibrary() }
             }
         } catch {
             print("Ошибка загрузки медиатеки: \(error)")
@@ -190,6 +192,39 @@ class DownloadManager: NSObject, ObservableObject {
                 self.localTracks = []
             }
         }
+    }
+    
+    /// Ранее YouTube-треки (M4A/AAC) сохранялись с расширением .mp3, из-за чего AVPlayer не мог их открыть.
+    /// Переименовываем такие файлы по реальной сигнатуре содержимого.
+    private func fixMisnamedAudioFiles(in tracks: inout [LocalTrack]) -> Bool {
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        var changed = false
+        
+        for index in tracks.indices {
+            let path = tracks[index].relativePath
+            guard path.hasPrefix(offlineFolder + "/"), path.lowercased().hasSuffix(".mp3") else { continue }
+            let oldURL = documentsDirectory.appendingPathComponent(path)
+            guard fileManager.fileExists(atPath: oldURL.path) else { continue }
+            
+            let realExtension = AudioFileSniffer.fileExtension(for: oldURL)
+            guard realExtension != "mp3" else { continue }
+            
+            let newPath = (path as NSString).deletingPathExtension + "." + realExtension
+            let newURL = documentsDirectory.appendingPathComponent(newPath)
+            do {
+                if fileManager.fileExists(atPath: newURL.path) {
+                    try fileManager.removeItem(at: newURL)
+                }
+                try fileManager.moveItem(at: oldURL, to: newURL)
+                tracks[index].relativePath = newPath
+                changed = true
+                print("DownloadManager: 🔧 Исправлено расширение файла: \(path) → \(newPath)")
+            } catch {
+                print("DownloadManager: не удалось переименовать \(path): \(error)")
+            }
+        }
+        return changed
     }
     
     /// Сохранение базы данных библиотеки
@@ -259,9 +294,8 @@ class DownloadManager: NSObject, ObservableObject {
                 return
             }
             
-            var request = URLRequest(url: audioUrl)
-            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-            request.setValue("https://www.youtube.com/", forHTTPHeaderField: "Referer")
+            // Ссылка googlevideo уже подписана под клиент YouTubeKit — чужой User-Agent может дать 403
+            let request = URLRequest(url: audioUrl)
             self?.startDownload(
                 trackId: trackId,
                 title: track.title,
@@ -349,8 +383,21 @@ extension DownloadManager: URLSessionDownloadDelegate {
         let duration: Double? = components.count >= 6 && !components[5].isEmpty ? Double(components[5]) : nil
         let thumbnailUrl: String? = components.count >= 7 && !components[6].isEmpty ? String(components[6]) : nil
         
-        // Генерируем уникальное локальное имя файла для избежания конфликтов
-        let fileExtension = "mp3" // По умолчанию mp3
+        // Сервер вернул ошибку (например, 403 от googlevideo) — не сохраняем HTML/JSON как трек
+        guard AudioFileSniffer.isSuccessfulDownload(downloadTask) else {
+            print("DownloadManager: ❌ Сервер вернул ошибку при скачивании \(trackId)")
+            if source == .youtube {
+                YouTubeService.shared.invalidateStreamCache(for: trackId)
+            }
+            DispatchQueue.main.async {
+                self.activeDownloads.removeValue(forKey: trackId)
+                self.downloadTasks.removeValue(forKey: trackId)
+            }
+            return
+        }
+        
+        // Генерируем уникальное локальное имя файла; расширение — по реальному содержимому (YouTube отдаёт M4A)
+        let fileExtension = AudioFileSniffer.fileExtension(for: location)
         let safeFileName = "\(trackId.uuidCompatible).\(fileExtension)"
         let relativeFilePath = "\(offlineFolder)/\(safeFileName)"
         

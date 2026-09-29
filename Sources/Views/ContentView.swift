@@ -43,6 +43,23 @@ struct ContentView: View {
             
             // Полноценный стеклянный Мини-плеер + плавающий стеклянный TabBar внизу
             VStack(spacing: 8) {
+                if let message = playerManager.playbackErrorMessage {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.yellow)
+                        Text(message)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlass(cornerRadius: 16, opacity: 0.65)
+                    .onTapGesture { playerManager.playbackErrorMessage = nil }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                
                 if playerManager.currentTrack != nil {
                     MiniPlayerView(isPlayerExpanded: $isPlayerExpanded)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -53,6 +70,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: playerManager.playbackErrorMessage)
             .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .fullScreenCover(isPresented: $isPlayerExpanded) {

@@ -65,6 +65,22 @@ struct PlayerDetailView: View {
                                 .padding(.bottom, 8)
                         }
                     }
+                    .overlay(alignment: .top) {
+                        if let message = playerManager.playbackErrorMessage {
+                            Text(message)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .liquidGlass(cornerRadius: 16, opacity: 0.65)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 64)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                                .onTapGesture { playerManager.playbackErrorMessage = nil }
+                        }
+                    }
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: playerManager.playbackErrorMessage)
                     .contentShape(Rectangle())
                     .offset(y: dismissOffset)
                     .gesture(dismissGesture)

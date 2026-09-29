@@ -34,6 +34,7 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
         CFBundleIconName: AppIcon
         UIBackgroundModes:
           - audio

@@ -96,6 +96,19 @@ class CacheManager: NSObject, ObservableObject {
         }
     }
     
+    /// Удаление повреждённого/невоспроизводимого файла из кэша
+    func removeCachedTrack(trackId: String) {
+        DispatchQueue.main.async {
+            guard let item = self.metadata[trackId] else { return }
+            let fileURL = self.cacheURL.appendingPathComponent(item.relativePath)
+            try? FileManager.default.removeItem(at: fileURL)
+            self.metadata.removeValue(forKey: trackId)
+            self.cachedTrackIds.remove(trackId)
+            self.saveMetadata()
+            print("CacheManager: 🗑 Удалён невоспроизводимый кэш для \(trackId)")
+        }
+    }
+    
     /// Проверка, кэширован ли файл
     func isCached(trackId: String) -> Bool {
         return cachedTrackIds.contains(trackId)
@@ -162,15 +175,24 @@ extension CacheManager: URLSessionDownloadDelegate {
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let taskDescription = downloadTask.taskDescription else { return }
-        let components = taskDescription.split(separator: "|")
+        let components = taskDescription.components(separatedBy: "|")
         guard components.count >= 4 else { return }
         
-        let trackId = String(components[0])
-        let title = String(components[1])
-        let sourceRaw = String(components[2])
-        let size = Int64(components[3]) ?? 0
+        // Название может содержать «|» (частое для YouTube), поэтому id берём с начала, а источник и размер — с конца
+        let trackId = components[0]
+        let title = components[1..<(components.count - 2)].joined(separator: "|")
+        let sourceRaw = components[components.count - 2]
+        let size = Int64(components[components.count - 1]) ?? 0
         
-        let fileExtension = "mp3"
+        guard AudioFileSniffer.isSuccessfulDownload(downloadTask) else {
+            print("CacheManager: ❌ Сервер вернул ошибку при кэшировании \(trackId), файл отброшен")
+            DispatchQueue.main.async {
+                self.downloadTasks.removeValue(forKey: trackId)
+            }
+            return
+        }
+        
+        let fileExtension = AudioFileSniffer.fileExtension(for: location)
         let safeFileName = "\(trackId.uuidCompatible).\(fileExtension)"
         let destinationURL = cacheURL.appendingPathComponent(safeFileName)
         
@@ -222,5 +244,38 @@ extension CacheManager: URLSessionDownloadDelegate {
                 self.downloadTasks.removeValue(forKey: trackId)
             }
         }
+    }
+}
+
+// MARK: - Определение формата аудиофайла
+
+/// Определяет реальный контейнер аудиофайла по сигнатуре. AVPlayer выбирает демультиплексор
+/// по расширению локального файла, поэтому M4A с YouTube, сохранённый как .mp3, не воспроизводится.
+enum AudioFileSniffer {
+    static func fileExtension(for fileURL: URL, fallback: String = "mp3") -> String {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return fallback }
+        defer { try? handle.close() }
+        let header = [UInt8](handle.readData(ofLength: 12))
+        guard header.count >= 4 else { return fallback }
+
+        if header.count >= 8, header[4] == 0x66, header[5] == 0x74, header[6] == 0x79, header[7] == 0x70 {
+            return "m4a" // ....ftyp — MP4/M4A (AAC)
+        }
+        if header[0] == 0x49, header[1] == 0x44, header[2] == 0x33 { return "mp3" } // ID3
+        if header[0] == 0xFF, (header[1] & 0xE0) == 0xE0 {
+            // MPEG sync: layer 0 у ADTS-AAC, остальное — MP3
+            return (header[1] & 0x06) == 0 ? "aac" : "mp3"
+        }
+        if header[0] == 0x66, header[1] == 0x4C, header[2] == 0x61, header[3] == 0x43 { return "flac" } // fLaC
+        if header[0] == 0x52, header[1] == 0x49, header[2] == 0x46, header[3] == 0x46 { return "wav" } // RIFF
+        if header[0] == 0x4F, header[1] == 0x67, header[2] == 0x67, header[3] == 0x53 { return "ogg" } // OggS
+        if header[0] == 0x1A, header[1] == 0x45, header[2] == 0xDF, header[3] == 0xA3 { return "webm" } // Matroska/WebM
+        return fallback
+    }
+
+    /// Успешный ли HTTP-ответ у завершённой загрузки (иначе на диск попадёт HTML/JSON с ошибкой)
+    static func isSuccessfulDownload(_ task: URLSessionTask) -> Bool {
+        guard let http = task.response as? HTTPURLResponse else { return true }
+        return (200...299).contains(http.statusCode)
     }
 }

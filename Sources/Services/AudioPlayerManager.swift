@@ -58,6 +58,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
     @Published var repeatMode: RepeatMode = .none
     @Published var isShuffleEnabled = false
     @Published var isBuffering = false // Индикатор буферизации для UI
+    /// Понятное пользователю сообщение о сбое воспроизведения (показывается баннером)
+    @Published var playbackErrorMessage: String? = nil
     
     // Настройки для Аудиокниг и Подкастов (Скорость, Таймер Сна, Перемотка)
     @Published var playbackRate: Float = 1.0
@@ -187,14 +189,22 @@ class AudioPlayerManager: NSObject, ObservableObject {
     
     /// Воспроизведение / Пауза текущего трека
     func togglePlayPause() {
-        guard let _ = currentTrack else { return }
+        guard let track = currentTrack else { return }
+        
+        // После сбоя загрузки кнопка Play повторяет попытку для текущего трека
+        if playbackState == .stopped {
+            playbackErrorMessage = nil
+            retryCount = 0
+            loadAndPlay(track: track)
+            return
+        }
         
         if playbackState == .playing {
             player?.pause()
             playbackState = .paused
             updateNowPlayingPlaybackState()
         } else if playbackState == .paused {
-            player?.play()
+            player?.playImmediately(atRate: playbackRate)
             playbackState = .playing
             updateNowPlayingPlaybackState()
         }
@@ -423,13 +433,10 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 if let audioUrl = audioUrl {
                     print("AudioPlayer: получен аудио URL: \(audioUrl.absoluteString.prefix(100))...")
                     
-                    let headers = [
-                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-                        "Referer": "https://www.youtube.com/"
-                    ]
+                    // Без подмены User-Agent: ссылка googlevideo подписана под клиент YouTubeKit,
+                    // и чужие заголовки приводят к 403 на части треков
                     let assetOptions: [String: Any] = [
-                        "AVURLAssetHTTPHeaderFieldsKey": headers,
-                        "AVURLAssetPreferPreciseDurationAndTimingKey": false
+                        AVURLAssetPreferPreciseDurationAndTimingKey: false
                     ]
                     let asset = AVURLAsset(url: audioUrl, options: assetOptions)
                     let item = AVPlayerItem(asset: asset)
@@ -447,6 +454,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     DispatchQueue.main.async {
                         guard self.currentTrack?.id == track.id else { return }
                         self.playbackState = .stopped
+                        self.isBuffering = false
+                        self.showPlaybackError("Не удалось загрузить «\(track.title)» с YouTube. Проверьте интернет и попробуйте ещё раз.")
                         self.endBackgroundTask()
                     }
                 }
@@ -509,7 +518,10 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private func setupPlayer(with item: AVPlayerItem, track: PlayerTrack) {
         cancellables.removeAll()
         
-        item.preferredForwardBufferDuration = 5.0 // Агрессивный 5-секундный буфер для мгновенного старта
+        // Для онлайн-потоков буфер задан при создании (YouTube — 30 с); остальным — быстрый старт
+        if item.preferredForwardBufferDuration == 0 {
+            item.preferredForwardBufferDuration = 5.0
+        }
         
         if let existingPlayer = player {
             existingPlayer.replaceCurrentItem(with: item)
@@ -561,7 +573,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     self?.playbackState = .playing
                     self?.isBuffering = false
                     self?.retryCount = 0 // Сброс счётчика попыток при успехе
-                    self?.player?.playImmediately(atRate: 1.0) // Моментальный запуск
+                    self?.player?.playImmediately(atRate: self?.playbackRate ?? 1.0) // Моментальный запуск с выбранной скоростью
                     
                     // 📌 Автоматическое возобновление позиции для Аудиокниг и Подкастов
                     if let savedPos = self?.getSavedPlayheadPosition(for: track.id), savedPos > 5 {
@@ -573,6 +585,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
                     self?.endBackgroundTask()
                 } else if status == .failed {
                     print("AudioPlayerManager: ❌ Ошибка воспроизведения элемента: \(String(describing: item.error))")
+                    self?.dropBrokenCacheIfNeeded(item: item, track: track)
                     if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
                         // Сбрасываем кеш невалидного/просроченного аудио URL для YouTube
                         YouTubeService.shared.invalidateStreamCache(for: track.id)
@@ -653,7 +666,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
         let nextIndex = currentTrackIndex + 1
         guard nextIndex >= 0 && nextIndex < activePlaylist.count else { return }
         let nextTrack = activePlaylist[nextIndex]
-        if nextTrack.sourceName == "YouTube Music" || nextTrack.sourceName == "Аудиокниги" {
+        let isCached = CacheManager.shared.isCached(trackId: nextTrack.id)
+        if !isCached && (nextTrack.sourceName.contains("YouTube") || nextTrack.sourceName == "Аудиокниги") {
             YouTubeService.shared.getAudioURL(for: nextTrack.id) { _ in }
         }
     }
@@ -662,6 +676,24 @@ class AudioPlayerManager: NSObject, ObservableObject {
 
 
 
+    
+    private func showPlaybackError(_ message: String) {
+        playbackErrorMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            if self?.playbackErrorMessage == message {
+                self?.playbackErrorMessage = nil
+            }
+        }
+    }
+    
+    /// Если не открылся файл из кэша (битый/неверный формат) — удаляем его, чтобы повтор пошёл по сети
+    private func dropBrokenCacheIfNeeded(item: AVPlayerItem, track: PlayerTrack) {
+        guard let urlAsset = item.asset as? AVURLAsset, urlAsset.url.isFileURL else { return }
+        if let localURL = track.localURL, localURL.standardizedFileURL == urlAsset.url.standardizedFileURL {
+            return // Это файл медиатеки, а не кэш
+        }
+        CacheManager.shared.removeCachedTrack(trackId: track.id)
+    }
     
     private func removeTimeObserver() {
         if let token = timeObserverToken {
@@ -676,6 +708,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
     private func retryPlayback(track: PlayerTrack) {
         guard retryCount < maxRetries else {
             print("AudioPlayerManager: ❌ Исчерпаны все \(maxRetries) попытки для трека: \(track.title)")
+            showPlaybackError("Трек «\(track.title)» недоступен — переключаемся на следующий.")
             retryCount = 0
             playbackState = .stopped
             isBuffering = false
@@ -714,6 +747,9 @@ class AudioPlayerManager: NSObject, ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let current = self.currentTrack else { return }
             print("AudioPlayerManager: ⚠️ Сбой стриминга (FailedToPlayToEndTime) для трека \(current.title)")
+            if let item = notification.object as? AVPlayerItem {
+                self.dropBrokenCacheIfNeeded(item: item, track: current)
+            }
             if current.sourceName.contains("YouTube") || current.sourceName == "Аудиокниги" {
                 YouTubeService.shared.invalidateStreamCache(for: current.id)
             }

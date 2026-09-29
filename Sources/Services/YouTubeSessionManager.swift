@@ -29,13 +29,8 @@ class YouTubeSessionManager: ObservableObject {
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         request.setValue("en-US,en", forHTTPHeaderField: "accept-language")
         
-        // Помечаем запрос, чтобы URLProtocol его не перехватывал рекурсивно
-        let nsRequest = request as NSURLRequest
-        let mutableRequest = nsRequest.mutableCopy() as! NSMutableURLRequest
-        URLProtocol.setProperty(true, forKey: "YouTubeURLProtocolHandled", in: mutableRequest)
-        
         do {
-            let (data, _) = try await URLSession.shared.data(for: mutableRequest as URLRequest)
+            let (data, _) = try await URLSession.shared.data(for: request)
             if let html = String(data: data, encoding: .utf8),
                let parsedData = parseVisitorData(from: html) {
                 self.visitorData = parsedData
