@@ -1,545 +1,357 @@
 import SwiftUI
 import MediaPlayer
+import AVKit
 
-/// Экран детального воспроизведения трека с премиальным дизайном (Glassmorphism и неоновая подсветка)
+/// Полноэкранный плеер: адаптивный фон по обложке, жесты (свайп вниз — свернуть,
+/// свайп по обложке — сменить трек), крупный скраббер, очередь и системный AirPlay.
 struct PlayerDetailView: View {
     @ObservedObject var playerManager = AudioPlayerManager.shared
     @ObservedObject var playlistManager = PlaylistManager.shared
     @Binding var isPlayerExpanded: Bool
-    
-    @State private var isDraggingSlider = false
-    @State private var progress: Double = 0.0
-    @AppStorage("playerInterfaceMode") private var playerInterfaceMode = "vinyl"
-    
-    @StateObject private var visualizerEngine = VisualizerEngine()
-    
-    @State private var rotationAngle: Double = 0.0
-    @State private var timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    
+
+    @AppStorage("playerInterfaceMode") private var playerInterfaceMode = "cover"
+
+    @StateObject private var artwork = NowPlayingArtworkLoader()
+    /// Движок визуализации хранится в холдере без @Published, чтобы 30 fps обновления
+    /// перерисовывали только подвиды спектрографа, а не весь экран
+    @StateObject private var visuals = VisualizerHolder()
+
+    @State private var dismissOffset: CGFloat = 0
+    @State private var artworkSwipe: CGFloat = 0
+    @State private var showQueue = false
+    @State private var showAddToPlaylist = false
+
+    private var isPlaying: Bool { playerManager.playbackState == .playing }
+
     var body: some View {
         Group {
             if let track = playerManager.currentTrack {
-                ZStack {
-                    // 1. Премиальный обсидиановый фон
-                    AppTheme.darkBackgroundGradient
-                        .ignoresSafeArea()
-                    
-                    // 2. Медленно пульсирующие фоновые неоновые круги (создают объемное свечение)
-                    neonBackgroundGlows
-                    
-                    VStack(spacing: 0) {
-                        // Верхний Хедер
-                        headerView
-                            .padding(.top, 14)
-                        
-                        Spacer()
-                        
-                        // Режим визуализации (Винил / Обложка / Спектрограф)
-                        playerInterfaceView(for: track)
-                        
-                        Spacer()
-                        
-                        // Информация о треке и Избранное
-                        trackInfoView(for: track)
-                            .padding(.bottom, 22)
-                        
-                        // Ползунок прогресса
-                        progressSliderView
-                            .padding(.bottom, 24)
-                        
-                        // Панель управления для Аудиокниг и Подкастов (Перемотка -15с/+30с, Скорость, Таймер Сна)
-                        audiobookAndPodcastControlsView
-                            .padding(.bottom, 16)
+                GeometryReader { geo in
+                    ZStack {
+                        AdaptiveArtworkBackground(image: artwork.image, tint: artwork.tint)
 
-                        // Кнопки управления (Назад, Играть, Вперед, Шафл, Репит)
-                        controlPanelView
-                            .padding(.bottom, 24)
+                        BassReactiveGlow(engine: visuals.engine, tint: artwork.tint, isPlaying: isPlaying)
+                            .offset(y: -geo.size.height * 0.18)
+                            .allowsHitTesting(false)
 
-                        
-                        // Слайдер громкости
-                        volumeControlView
-                            .padding(.bottom, 20)
-                        
-                        // Системный AirPlay Вывод Звука (как в дизайне AirPods Max)
-                        airplayOutputView
-                            .padding(.bottom, 16)
+                        VStack(spacing: 0) {
+                            headerView(for: track)
+                                .padding(.top, 6)
+
+                            Spacer(minLength: 12)
+
+                            stageView(for: track, side: stageSide(in: geo.size))
+
+                            Spacer(minLength: 12)
+
+                            trackInfoView(for: track)
+                                .padding(.bottom, 18)
+
+                            PlayerScrubber(
+                                current: playerManager.currentTime,
+                                duration: playerManager.duration,
+                                onSeek: { playerManager.seek(to: $0) }
+                            )
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 14)
+
+                            transportControls(for: track)
+                                .padding(.bottom, 18)
+
+                            volumeControlView
+                                .padding(.bottom, 14)
+
+                            bottomToolbar
+                                .padding(.bottom, 8)
+                        }
                     }
+                    .contentShape(Rectangle())
+                    .offset(y: dismissOffset)
+                    .gesture(dismissGesture)
+                }
+                .sheet(isPresented: $showQueue) {
+                    QueueSheetView()
+                }
+                .sheet(isPresented: $showAddToPlaylist) {
+                    AddToPlaylistView(track: track.toPlaylistTrack())
                 }
             } else {
-                EmptyView()
+                Color.black.ignoresSafeArea()
             }
         }
         .preferredColorScheme(.dark)
-        .onReceive(timer) { _ in
-            if playerManager.playbackState == .playing {
-                rotationAngle += 1.5
-            }
-        }
-        .onReceive(playerManager.$currentTime) { newTime in
-            if !isDraggingSlider {
-                progress = newTime
-            }
-        }
-        .onAppear {
-            progress = playerManager.currentTime
+        .onAppear { artwork.load(for: playerManager.currentTrack) }
+        .onChange(of: playerManager.currentTrack) { newTrack in
+            artwork.load(for: newTrack)
         }
     }
-    
-    // MARK: - Фоновое неоновое свечение (Динамический бэкграунд)
-    
-    private var neonBackgroundGlows: some View {
-        let isPlaying = playerManager.playbackState == .playing
-        let bassValue = isPlaying ? CGFloat(visualizerEngine.heights[0]) : 0.05
-        
-        return ZStack {
-            // Мягкое лунное свечение вокруг винила/обложки в такт музыке
-            Circle()
-                .fill(Color.white.opacity(0.04 + Double(bassValue * 0.05)))
-                .frame(width: 320, height: 320)
-                .blur(radius: 70 + bassValue * 30)
-                .offset(x: 0, y: -60)
-            
-            Circle()
-                .fill(Color(white: 0.9).opacity(0.025 + Double(bassValue * 0.04)))
-                .frame(width: 280, height: 280)
-                .blur(radius: 65 + bassValue * 25)
-                .offset(x: 0, y: 80)
-        }
-        .ignoresSafeArea()
+
+    private func stageSide(in size: CGSize) -> CGFloat {
+        min(size.width - 48, size.height * 0.40)
     }
-    
-    // MARK: - Верхний Хедер
-    
-    private var headerView: some View {
-        HStack {
-            Button(action: {
-                HapticManager.shared.triggerImpact(style: .light)
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                    isPlayerExpanded = false
+
+    // MARK: - Жест сворачивания
+
+    private var dismissGesture: some Gesture {
+        DragGesture(minimumDistance: 16)
+            .onChanged { value in
+                guard value.translation.height > 0,
+                      abs(value.translation.height) > abs(value.translation.width) else { return }
+                dismissOffset = value.translation.height
+            }
+            .onEnded { value in
+                let shouldDismiss = value.translation.height > 140 || value.predictedEndTranslation.height > 320
+                if shouldDismiss {
+                    HapticManager.shared.triggerImpact(style: .light)
+                    close()
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        dismissOffset = 0
+                    }
                 }
-            }) {
-                ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterial)
-                    Circle()
-                        .fill(Color.white.opacity(0.06))
-                    
+            }
+    }
+
+    private func close() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            isPlayerExpanded = false
+        }
+    }
+
+    // MARK: - Хедер
+
+    private func headerView(for track: PlayerTrack) -> some View {
+        VStack(spacing: 10) {
+            Capsule()
+                .fill(Color.white.opacity(0.35))
+                .frame(width: 38, height: 5)
+
+            HStack {
+                Button(action: {
+                    HapticManager.shared.triggerImpact(style: .light)
+                    close()
+                }) {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.white.opacity(0.10)))
                 }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                )
-            }
-            .buttonStyle(ScaleButtonStyle())
-            
-            Spacer()
-            
-            Text("Now Playing")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.white)
-                .tracking(0.5)
-            
-            Spacer()
-            
-            // Кнопка переключения режимов вывода (Винил/Обложка/Спектрограф) в хедере
-            Button(action: {
-                cycleInterfaceMode()
-            }) {
-                ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterial)
-                    Circle()
-                        .fill(Color.white.opacity(0.06))
-                    
-                    Image(systemName: playerInterfaceMode == "vinyl" ? "record.circle" : (playerInterfaceMode == "cover" ? "photo.fill" : "waveform.path"))
-                        .font(.system(size: 15))
+                .buttonStyle(SpringScaleButtonStyle(scale: 0.88))
+                .accessibilityLabel("Свернуть плеер")
+
+                Spacer()
+
+                VStack(spacing: 2) {
+                    Text("ИГРАЕТ ИЗ")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.2)
+                        .foregroundColor(.white.opacity(0.5))
+                    Text(track.sourceName)
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
+                        .lineLimit(1)
                 }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                )
+
+                Spacer()
+
+                Menu {
+                    Picker("Вид", selection: interfaceModeBinding) {
+                        Label("Обложка", systemImage: "square.fill").tag("cover")
+                        Label("Винил", systemImage: "record.circle").tag("vinyl")
+                        Label("Спектр", systemImage: "waveform").tag("visualizer")
+                    }
+                    Divider()
+                    Button {
+                        showAddToPlaylist = true
+                    } label: {
+                        Label("Добавить в плейлист", systemImage: "text.badge.plus")
+                    }
+                    Button {
+                        showQueue = true
+                    } label: {
+                        Label("Очередь воспроизведения", systemImage: "list.bullet")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.white.opacity(0.10)))
+                }
+                .accessibilityLabel("Ещё")
             }
-            .buttonStyle(ScaleButtonStyle())
         }
         .padding(.horizontal, 20)
     }
-    
-    // MARK: - Центральный режим визуализации (Режимы)
-    
+
+    private var interfaceModeBinding: Binding<String> {
+        Binding(
+            get: { playerInterfaceMode },
+            set: { newValue in
+                HapticManager.shared.triggerImpact(style: .medium)
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                    playerInterfaceMode = newValue
+                }
+            }
+        )
+    }
+
+    // MARK: - Сцена (обложка / винил / спектр)
+
     @ViewBuilder
-    private func playerInterfaceView(for track: PlayerTrack) -> some View {
-        let isPlaying = playerManager.playbackState == .playing
-        let bassScale = isPlaying ? CGFloat(1.0 + visualizerEngine.heights[0] * 0.08) : 1.0
-        let bassBlur = isPlaying ? CGFloat(25.0 + visualizerEngine.heights[0] * 8.0) : 25.0
-        
-        if playerInterfaceMode == "vinyl" {
-            let bassOpacity = isPlaying ? Double(0.15 + visualizerEngine.heights[0] * 0.15) : 0.15
-            vinylPlayerView(for: track, bassScale: bassScale, bassBlur: bassBlur, bassOpacity: bassOpacity)
-        } else if playerInterfaceMode == "cover" {
-            let bassCoverOpacity = isPlaying ? Double(0.18 + visualizerEngine.heights[0] * 0.18) : 0.18
-            coverArtView(for: track, bassScale: bassScale, bassBlur: bassBlur, bassCoverOpacity: bassCoverOpacity)
-        } else {
-            visualizerModeView
-        }
-    }
-    
-    // Режим 1: Виниловая пластинка
-    private func vinylPlayerView(for track: PlayerTrack, bassScale: CGFloat, bassBlur: CGFloat, bassOpacity: Double) -> some View {
+    private func stageView(for track: PlayerTrack, side: CGFloat) -> some View {
         ZStack {
-            // Подложка деликатного лунного свечения
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color.white.opacity(bassOpacity * 0.35))
+            switch playerInterfaceMode {
+            case "vinyl":
+                VinylStageView(
+                    image: artwork.image,
+                    title: track.title,
+                    isPlaying: isPlaying
+                )
+                .scaleEffect(side / 290)
+                .frame(width: side, height: side)
+            case "visualizer":
+                VStack(spacing: 12) {
+                    RealtimeVisualizerView(engine: visuals.engine)
+                        .frame(height: 100)
+                    CircularVisualizerView(engine: visuals.engine, isPlaying: isPlaying)
+                }
                 .frame(width: 290, height: 290)
-                .scaleEffect(bassScale)
-                .blur(radius: bassBlur)
-                .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.6), value: visualizerEngine.heights[0])
-            
-            // Стеклянный стол проигрывателя (Glassmorphism)
-            ZStack {
-                VisualEffectBlur(material: .systemUltraThinMaterial)
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(Color.white.opacity(0.04))
+                .scaleEffect(side / 290)
+                .frame(width: side, height: side)
+            default:
+                ArtworkImageView(image: artwork.image, title: track.title, cornerRadius: 22)
+                    .frame(width: side, height: side)
+                    .shadow(color: artwork.tint.opacity(isPlaying ? 0.45 : 0.2), radius: 40, x: 0, y: 18)
+                    .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 12)
+                    .scaleEffect(isPlaying ? 1.0 : 0.84)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.72), value: isPlaying)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .frame(width: 290, height: 290)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.4), radius: 15, x: 0, y: 8)
-            
-            // Металлические винтики по углам корпуса
-            Group {
-                Circle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 5, height: 5)
-                    .offset(x: -130, y: -130)
-                Circle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 5, height: 5)
-                    .offset(x: 130, y: -130)
-                Circle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 5, height: 5)
-                    .offset(x: -130, y: 130)
-                Circle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 5, height: 5)
-                    .offset(x: 130, y: 130)
-            }
-            
-            // Пластинка (Винил)
-            Circle()
-                .fill(LinearGradient(
-                    colors: [Color(white: 0.22), Color(white: 0.06)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 250, height: 250)
-                .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 4)
-            
-            // Звуковые дорожки на пластинке
-            ForEach(0..<12) { i in
-                Circle()
-                    .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
-                    .frame(width: CGFloat(60 + i * 15), height: CGFloat(60 + i * 15))
-            }
-            
-            // Обложка по центру пластинки (круглая)
-            ZStack {
-                if let coverURL = track.localCoverURL, let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 90, height: 90)
-                        .clipShape(Circle())
-                } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
-                    // Загрузка обложки YouTube-трека через RemoteCoverLoader
-                    RemoteCoverLoader(
-                        trackId: track.id,
-                        sourceName: track.sourceName,
-                        width: 90,
-                        height: 90,
-                        isCircle: true,
-                        placeholderLetter: String(track.title.first ?? "M")
-                    )
-                } else {
-                    Circle()
-                        .fill(Color(white: 0.12))
-                        .frame(width: 90, height: 90)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                        )
-                    
-                    Text(String(track.title.first ?? "M").uppercased())
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                
-                // Шпиндель (центр пластинки)
-                Circle()
-                    .fill(LinearGradient(
-                        colors: [.white, .gray],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(width: 12, height: 12)
-                
-                Circle()
-                    .fill(Color.black)
-                    .frame(width: 4, height: 4)
-            }
-            .rotationEffect(.degrees(rotationAngle))
-            
-            // Тонарм проигрывателя (с анимацией перемещения)
-            TonearmView(isPlaying: playerManager.playbackState == .playing)
-                .offset(x: 95, y: -75)
         }
-        .frame(width: 290, height: 290)
+        .frame(width: side, height: side)
+        .offset(x: artworkSwipe)
+        .rotation3DEffect(.degrees(Double(artworkSwipe) / 14), axis: (x: 0, y: 1, z: 0))
+        .opacity(1 - Double(min(abs(artworkSwipe) / 400, 0.5)))
         .contentShape(Rectangle())
-        .onTapGesture {
-            cycleInterfaceMode()
+        .onTapGesture(count: 2) {
+            HapticManager.shared.triggerImpact(style: .medium)
+            playlistManager.toggleFavorite(track: track.toPlaylistTrack())
         }
+        .gesture(artworkSwipeGesture)
+        .transition(.opacity)
+        .id(playerInterfaceMode)
     }
-    
-    // Режим 2: Обложка (Парящая карточка из макета Dolby Atmos)
-    private func coverArtView(for track: PlayerTrack, bassScale: CGFloat, bassBlur: CGFloat, bassCoverOpacity: Double) -> some View {
-        ZStack {
-            // Подложка лунного свечения
-            RoundedRectangle(cornerRadius: 28)
-                .fill(Color.white.opacity(bassCoverOpacity * 0.35))
-                .frame(width: 280, height: 280)
-                .scaleEffect(bassScale)
-                .blur(radius: bassBlur)
-                .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.6), value: visualizerEngine.heights[0])
-            
-            // Сама обложка
-            ZStack(alignment: .top) {
-                if let coverURL = track.localCoverURL, let uiImage = UIImage(contentsOfFile: coverURL.path) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 275, height: 275)
-                        .clipShape(RoundedRectangle(cornerRadius: 28))
-                } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
-                    // Загрузка обложки YouTube-трека
-                    RemoteCoverLoader(
-                        trackId: track.id,
-                        sourceName: track.sourceName,
-                        width: 275,
-                        height: 275,
-                        cornerRadius: 28
-                    )
-                } else {
-                    RoundedRectangle(cornerRadius: 28)
-                        .fill(Color(white: 0.10))
-                        .frame(width: 275, height: 275)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 28)
-                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                        )
-                    
-                    Image(systemName: "music.note")
-                        .font(.system(size: 84))
-                        .foregroundColor(.white.opacity(0.2))
-                        .frame(width: 275, height: 275, alignment: .center)
+
+    private var artworkSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                if abs(value.translation.width) > abs(value.translation.height) {
+                    artworkSwipe = value.translation.width
+                } else if value.translation.height > 0 {
+                    dismissOffset = value.translation.height
                 }
-                
-                // Верхний оверлей плашки: NEW MUSIC
-                HStack {
-                    Text("NEW MUSIC")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.6))
-                        .cornerRadius(8)
-                    Spacer()
-                }
-                .padding(14)
-                
-                // Нижний оверлей плашки: Dolby Atmos (как на макете)
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Image(systemName: "badge.plus.radiowaves.forward")
-                            Text("Dolby Atmos")
-                        }
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.5))
-                        .cornerRadius(8)
-                        Spacer()
+            }
+            .onEnded { value in
+                if dismissOffset > 0 {
+                    if value.translation.height > 140 || value.predictedEndTranslation.height > 320 {
+                        HapticManager.shared.triggerImpact(style: .light)
+                        close()
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { dismissOffset = 0 }
                     }
-                    .padding(.bottom, 14)
+                    return
+                }
+
+                let width = value.translation.width
+                let predicted = value.predictedEndTranslation.width
+                if width < -90 || predicted < -260 {
+                    HapticManager.shared.triggerImpact(style: .medium)
+                    playerManager.nextTrack()
+                } else if width > 90 || predicted > 260 {
+                    HapticManager.shared.triggerImpact(style: .medium)
+                    playerManager.previousTrack()
+                }
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                    artworkSwipe = 0
                 }
             }
-            .frame(width: 275, height: 275)
-            .shadow(color: Color.black.opacity(0.4), radius: 15, x: 0, y: 10)
-        }
-        .frame(width: 290, height: 290)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            cycleInterfaceMode()
-        }
     }
-    
-    // Режим 3: Спектрограф
-    private var visualizerModeView: some View {
-        VStack(spacing: 12) {
-            RealtimeVisualizerView(engine: visualizerEngine)
-                .frame(height: 100)
-                
-            CircularVisualizerView(engine: visualizerEngine, isPlaying: playerManager.playbackState == .playing)
-        }
-        .frame(width: 290, height: 290)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            cycleInterfaceMode()
-        }
-    }
-    
+
     // MARK: - Информация о треке
-    
+
     private func trackInfoView(for track: PlayerTrack) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
+        let isFavorite = playlistManager.isTrackFavorite(trackId: track.id)
+
+        return HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(track.title)
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.white)
                     .lineLimit(1)
-                
+
                 Text(track.artist)
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.5))
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundColor(.white.opacity(0.6))
                     .lineLimit(1)
             }
-            
-            Spacer()
-            
-            // Кнопка Избранного (сердечко в стеклянной капсуле)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .animation(.easeInOut(duration: 0.25), value: track.id)
+
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .medium)
-                let playlistTrack = track.toPlaylistTrack()
-                playlistManager.toggleFavorite(track: playlistTrack)
+                playlistManager.toggleFavorite(track: track.toPlaylistTrack())
             }) {
-                ZStack {
-                    VisualEffectBlur(material: .systemUltraThinMaterial)
-                    Circle()
-                        .fill(Color.white.opacity(0.06))
-                    
-                    Image(systemName: playlistManager.isTrackFavorite(trackId: track.id) ? "heart.fill" : "heart")
-                        .font(.system(size: 20))
-                        .foregroundColor(playlistManager.isTrackFavorite(trackId: track.id) ? .white : .white.opacity(0.6))
-                        .shadow(color: playlistManager.isTrackFavorite(trackId: track.id) ? Color.white.opacity(0.6) : .clear, radius: 6)
-                }
-                .frame(width: 44, height: 44)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                )
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(isFavorite ? .white : .white.opacity(0.7))
+                    .scaleEffect(isFavorite ? 1.08 : 1.0)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(Color.white.opacity(isFavorite ? 0.18 : 0.08)))
             }
-            .buttonStyle(ScaleButtonStyle())
+            .buttonStyle(SpringScaleButtonStyle(scale: 0.85))
+            .animation(.spring(response: 0.3, dampingFraction: 0.55), value: isFavorite)
+            .accessibilityLabel(isFavorite ? "Убрать из избранного" : "Добавить в избранное")
         }
         .padding(.horizontal, 24)
     }
-    
-    // MARK: - Слайдер времени прогресса
-    
-    private var progressSliderView: some View {
-        VStack(spacing: 8) {
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Задняя полоса слайдера
-                    Capsule()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: 4)
-                    
-                    // Заливка прогресса
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white, Color(white: 0.85)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: CGFloat(progress / max(playerManager.duration, 1.0)) * geometry.size.width, height: 4)
-                        .shadow(color: Color.white.opacity(0.4), radius: 3)
-                    
-                    // Бегунок слайдера (как в дизайне)
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 14, height: 14)
-                        .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 1)
-                        .offset(x: CGFloat(progress / max(playerManager.duration, 1.0)) * geometry.size.width - 7)
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    isDraggingSlider = true
-                                    let percentage = min(max(0, value.location.x / geometry.size.width), 1.0)
-                                    progress = Double(percentage) * max(playerManager.duration, 1.0)
-                                }
-                                .onEnded { value in
-                                    isDraggingSlider = false
-                                    playerManager.seek(to: progress)
-                                }
-                        )
+
+    // MARK: - Кнопки управления
+
+    /// Для аудиокниг и длинных записей боковые кнопки становятся перемоткой −15 / +30 с
+    private func isLongForm(_ track: PlayerTrack) -> Bool {
+        track.sourceName == "Аудиокниги" || playerManager.duration > 20 * 60
+    }
+
+    private func transportControls(for track: PlayerTrack) -> some View {
+        let longForm = isLongForm(track)
+
+        return HStack(spacing: 0) {
+            if longForm {
+                sideButton(icon: "gobackward.15", isActive: false, label: "Назад на 15 секунд") {
+                    playerManager.skipBackward15()
+                }
+            } else {
+                sideButton(icon: "shuffle", isActive: playerManager.isShuffleEnabled, label: "Перемешать") {
+                    playerManager.toggleShuffle()
                 }
             }
-            .frame(height: 14)
-            .padding(.horizontal, 24)
-            
-            HStack {
-                Text(formatTime(progress))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.45))
-                
-                Spacer()
-                
-                Text(formatTime(playerManager.duration))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.45))
-            }
-            .padding(.horizontal, 26)
-        }
-    }
-    
-    // MARK: - Панель кнопок управления
-    
-    private var controlPanelView: some View {
-        HStack(spacing: 20) {
-            // Кнопка Shuffle
-            Button(action: {
-                HapticManager.shared.triggerImpact(style: .light)
-                playerManager.toggleShuffle()
-            }) {
-                controlButtonBackground(icon: "shuffle", isSelected: playerManager.isShuffleEnabled)
-            }
-            .buttonStyle(ScaleButtonStyle())
-            
-            // Кнопка Назад
+
+            Spacer()
+
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .light)
                 playerManager.previousTrack()
             }) {
-                controlButtonBackground(icon: "backward.fill", size: 50, iconSize: 16)
+                Image(systemName: "backward.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .buttonStyle(ScaleButtonStyle())
-            
-            // Центральная кнопка Воспроизведения (большая с градиентным свечением)
+            .buttonStyle(TransportButtonStyle(diameter: 62))
+            .accessibilityLabel("Предыдущий трек")
+
+            Spacer()
+
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .medium)
                 if playerManager.playbackState != .loading {
@@ -548,232 +360,591 @@ struct PlayerDetailView: View {
             }) {
                 ZStack {
                     Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white, Color(white: 0.88)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(Color.white)
                         .frame(width: 76, height: 76)
-                        .shadow(color: Color.white.opacity(0.40), radius: 14, x: 0, y: 0)
-                    
+                        .shadow(color: artwork.tint.opacity(0.55), radius: 22, x: 0, y: 6)
+
                     if playerManager.playbackState == .loading || playerManager.isBuffering {
-                        // Индикатор загрузки/буферизации
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                            .scaleEffect(1.3)
+                            .scaleEffect(1.2)
                     } else {
-                        Image(systemName: playerManager.playbackState == .playing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 24, weight: .bold))
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 30, weight: .bold))
                             .foregroundColor(.black)
-                            .offset(x: playerManager.playbackState == .playing ? 0 : 2)
+                            .offset(x: isPlaying ? 0 : 3)
+                            .transition(.scale.combined(with: .opacity))
+                            .id(isPlaying)
                     }
                 }
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPlaying)
             }
-            .buttonStyle(ScaleButtonStyle())
-            
-            // Кнопка Вперед
+            .buttonStyle(SpringScaleButtonStyle(scale: 0.9))
+            .accessibilityLabel(isPlaying ? "Пауза" : "Воспроизвести")
+
+            Spacer()
+
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .light)
                 playerManager.nextTrack()
             }) {
-                controlButtonBackground(icon: "forward.fill", size: 50, iconSize: 16)
+                Image(systemName: "forward.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .buttonStyle(ScaleButtonStyle())
-            
-            // Кнопка Repeat
-            Button(action: {
-                HapticManager.shared.triggerImpact(style: .light)
-                playerManager.toggleRepeatMode()
-            }) {
-                controlButtonBackground(icon: playerManager.repeatMode == .one ? "repeat.1" : "repeat", isSelected: playerManager.repeatMode != .none)
-            }
-            .buttonStyle(ScaleButtonStyle())
-        }
-    }
-    
-    // MARK: - Элементы управления для Аудиокниг и Подкастов
-    
-    private var audiobookAndPodcastControlsView: some View {
-        HStack(spacing: 12) {
-            // Быстрая перемотка назад -15с
-            Button(action: {
-                HapticManager.shared.triggerImpact(style: .light)
-                playerManager.skipBackward15()
-            }) {
-                HStack(spacing: 2) {
-                    Image(systemName: "gobackward.15")
-                        .font(.system(size: 13, weight: .bold))
-                }
-                .foregroundColor(.white.opacity(0.85))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.white.opacity(0.08)))
-            }
+            .buttonStyle(TransportButtonStyle(diameter: 62))
+            .accessibilityLabel("Следующий трек")
 
-            // Переключатель скорости (0.75x, 1.0x, 1.25x, 1.5x, 2.0x)
-            Menu {
-                Button("0.75x") { playerManager.setPlaybackRate(0.75) }
-                Button("1.0x (Обычная)") { playerManager.setPlaybackRate(1.0) }
-                Button("1.25x") { playerManager.setPlaybackRate(1.25) }
-                Button("1.5x") { playerManager.setPlaybackRate(1.5) }
-                Button("1.75x") { playerManager.setPlaybackRate(1.75) }
-                Button("2.0x") { playerManager.setPlaybackRate(2.0) }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "gauge.with.dots.needle.bottom.50percent")
-                        .font(.system(size: 12))
-                    Text(String(format: "%.2fx", playerManager.playbackRate))
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.white.opacity(0.12)))
-            }
+            Spacer()
 
-            // Таймер Сна (Sleep Timer)
-            Menu {
-                Button("Выключить таймер") { playerManager.setSleepTimer(minutes: 0) }
-                Button("15 минут") { playerManager.setSleepTimer(minutes: 15) }
-                Button("30 минут") { playerManager.setSleepTimer(minutes: 30) }
-                Button("45 минут") { playerManager.setSleepTimer(minutes: 45) }
-                Button("60 минут") { playerManager.setSleepTimer(minutes: 60) }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "moon.stars.fill")
-                        .font(.system(size: 12))
-                    if let remaining = playerManager.sleepTimerTimeRemaining {
-                        Text(formatRemainingTime(remaining))
-                            .font(.system(size: 11, weight: .bold))
-                    } else {
-                        Text("Таймер")
-                            .font(.system(size: 12, weight: .medium))
-                    }
+            if longForm {
+                sideButton(icon: "goforward.30", isActive: false, label: "Вперёд на 30 секунд") {
+                    playerManager.skipForward30()
                 }
-                .foregroundColor(playerManager.sleepTimerTimeRemaining != nil ? .white : .white.opacity(0.7))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(playerManager.sleepTimerTimeRemaining != nil ? Color.white.opacity(0.25) : Color.white.opacity(0.08)))
-            }
-
-            // Быстрая перемотка вперед +30с
-            Button(action: {
-                HapticManager.shared.triggerImpact(style: .light)
-                playerManager.skipForward30()
-            }) {
-                HStack(spacing: 2) {
-                    Image(systemName: "goforward.30")
-                        .font(.system(size: 13, weight: .bold))
+            } else {
+                sideButton(
+                    icon: playerManager.repeatMode == .one ? "repeat.1" : "repeat",
+                    isActive: playerManager.repeatMode != .none,
+                    label: "Повтор"
+                ) {
+                    playerManager.toggleRepeatMode()
                 }
-                .foregroundColor(.white.opacity(0.85))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.white.opacity(0.08)))
             }
         }
+        .padding(.horizontal, 20)
     }
 
-    private func formatRemainingTime(_ time: TimeInterval) -> String {
-        let mins = Int(time) / 60
-        let secs = Int(time) % 60
-        return String(format: "%d:%02d", mins, secs)
-    }
-
-    
-    private func controlButtonBackground(icon: String, size: CGFloat = 46, iconSize: CGFloat = 14, isSelected: Bool = false) -> some View {
-        ZStack {
-            VisualEffectBlur(material: .systemUltraThinMaterial)
-            Circle()
-                .fill(isSelected ? Color.white.opacity(0.22) : Color.white.opacity(0.06))
-            
-            Image(systemName: icon)
-                .font(.system(size: iconSize, weight: .bold))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.65))
+    private func sideButton(icon: String, isActive: Bool, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: {
+            HapticManager.shared.triggerImpact(style: .light)
+            action()
+        }) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(isActive ? .white : .white.opacity(0.55))
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 4, height: 4)
+                    .opacity(isActive ? 1 : 0)
+            }
         }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .overlay(
-            Circle()
-                .stroke(isSelected ? Color.white.opacity(0.40) : Color.white.opacity(0.12), lineWidth: 1)
-        )
+        .buttonStyle(TransportButtonStyle(diameter: 44))
+        .animation(.easeInOut(duration: 0.2), value: isActive)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
-    
-    // MARK: - Слайдер Громкости
-    
+
+    // MARK: - Громкость
+
     private var volumeControlView: some View {
         HStack(spacing: 12) {
             Button(action: {
                 HapticManager.shared.triggerImpact(style: .light)
                 playerManager.isMuted.toggle()
             }) {
-                Image(systemName: playerManager.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                Image(systemName: playerManager.isMuted ? "speaker.slash.fill" : "speaker.fill")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white.opacity(0.6))
-                    .font(.system(size: 13))
+                    .frame(width: 22)
             }
-            .buttonStyle(ScaleButtonStyle())
-            
+            .accessibilityLabel(playerManager.isMuted ? "Включить звук" : "Выключить звук")
+
             SystemVolumeSlider()
-                .frame(height: 32)
-            
+                .frame(height: 30)
+
             Image(systemName: "speaker.wave.3.fill")
-                .foregroundColor(.white.opacity(0.6))
-                .font(.system(size: 13))
-        }
-        .padding(.horizontal, 32)
-    }
-    
-    // MARK: - Панель AirPlay
-    
-    private var airplayOutputView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "airplayaudio")
-                .foregroundColor(.white.opacity(0.8))
                 .font(.system(size: 13, weight: .semibold))
-            
-            Text("AirPlay: iPhone Device")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.white.opacity(0.8))
-                .tracking(0.3)
+                .foregroundColor(.white.opacity(0.6))
+                .frame(width: 22)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: - Нижняя панель: скорость, таймер сна, AirPlay, очередь
+
+    private var bottomToolbar: some View {
+        HStack(spacing: 0) {
+            Menu {
+                ForEach([0.75, 1.0, 1.25, 1.5, 1.75, 2.0] as [Float], id: \.self) { rate in
+                    Button {
+                        HapticManager.shared.triggerSelection()
+                        playerManager.setPlaybackRate(rate)
+                    } label: {
+                        if playerManager.playbackRate == rate {
+                            Label(formatRate(rate), systemImage: "checkmark")
+                        } else {
+                            Text(formatRate(rate))
+                        }
+                    }
+                }
+            } label: {
+                toolbarItem(
+                    content: AnyView(
+                        Text(formatRate(playerManager.playbackRate))
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                    ),
+                    caption: "Скорость",
+                    isActive: playerManager.playbackRate != 1.0
+                )
+            }
+            .accessibilityLabel("Скорость воспроизведения")
+
+            Menu {
+                if playerManager.sleepTimerTimeRemaining != nil {
+                    Button(role: .destructive) {
+                        playerManager.setSleepTimer(minutes: 0)
+                    } label: {
+                        Label("Выключить таймер", systemImage: "xmark")
+                    }
+                }
+                ForEach([15, 30, 45, 60, 90], id: \.self) { minutes in
+                    Button("\(minutes) минут") {
+                        HapticManager.shared.triggerSelection()
+                        playerManager.setSleepTimer(minutes: minutes)
+                    }
+                }
+            } label: {
+                toolbarItem(
+                    content: AnyView(
+                        Group {
+                            if let remaining = playerManager.sleepTimerTimeRemaining {
+                                Text(formatTime(remaining))
+                                    .font(.system(size: 14, weight: .bold, design: .rounded).monospacedDigit())
+                            } else {
+                                Image(systemName: "moon.zzz.fill")
+                                    .font(.system(size: 17, weight: .semibold))
+                            }
+                        }
+                    ),
+                    caption: "Таймер",
+                    isActive: playerManager.sleepTimerTimeRemaining != nil
+                )
+            }
+            .accessibilityLabel("Таймер сна")
+
+            VStack(spacing: 4) {
+                AirPlayRoutePicker()
+                    .frame(width: 28, height: 24)
+                Text("Вывод")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("Устройство вывода звука")
+
+            Button {
+                HapticManager.shared.triggerImpact(style: .light)
+                showQueue = true
+            } label: {
+                toolbarItem(
+                    content: AnyView(
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 17, weight: .semibold))
+                    ),
+                    caption: "Очередь",
+                    isActive: false
+                )
+            }
+            .buttonStyle(SpringScaleButtonStyle(scale: 0.9))
+            .accessibilityLabel("Очередь воспроизведения")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-            ZStack {
-                VisualEffectBlur(material: .systemUltraThinMaterial)
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white.opacity(0.05))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
     }
-    
+
+    private func toolbarItem(content: AnyView, caption: String, isActive: Bool) -> some View {
+        VStack(spacing: 4) {
+            content
+                .foregroundColor(isActive ? .white : .white.opacity(0.7))
+                .frame(height: 24)
+            Text(caption)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(isActive ? .white : .white.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+    }
+
     // MARK: - Helpers
-    
-    private func formatTime(_ time: Double) -> String {
-        guard !time.isNaN else { return "00:00" }
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+
+    private func formatRate(_ rate: Float) -> String {
+        var text = String(format: "%.2f", rate)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text + "×"
     }
-    
-    private func cycleInterfaceMode() {
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-            if playerInterfaceMode == "vinyl" {
-                playerInterfaceMode = "cover"
-            } else if playerInterfaceMode == "cover" {
-                playerInterfaceMode = "visualizer"
-            } else {
-                playerInterfaceMode = "vinyl"
+
+    private func formatTime(_ time: Double) -> String {
+        PlayerTimeFormatter.string(from: time)
+    }
+}
+
+// MARK: - Форматирование времени
+
+enum PlayerTimeFormatter {
+    static func string(from time: Double) -> String {
+        guard time.isFinite, time >= 0 else { return "0:00" }
+        let total = Int(time)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Скраббер прогресса
+
+/// Прогресс-бар, который утолщается при перетаскивании и показывает оставшееся время
+struct PlayerScrubber: View {
+    let current: Double
+    let duration: Double
+    let onSeek: (Double) -> Void
+
+    @State private var dragValue: Double? = nil
+
+    var body: some View {
+        let total = max(duration, 1)
+        let shown = dragValue ?? current
+        let fraction = CGFloat(min(max(shown / total, 0), 1))
+        let isActive = dragValue != nil
+
+        VStack(spacing: 6) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.18))
+                    Rectangle()
+                        .fill(Color.white.opacity(isActive ? 1.0 : 0.85))
+                        .frame(width: geo.size.width * fraction)
+                }
+                .frame(height: isActive ? 12 : 6)
+                .clipShape(Capsule())
+                .shadow(color: .white.opacity(isActive ? 0.25 : 0), radius: 8)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            if dragValue == nil {
+                                HapticManager.shared.triggerImpact(style: .light)
+                            }
+                            let percentage = min(max(value.location.x / max(geo.size.width, 1), 0), 1)
+                            dragValue = Double(percentage) * total
+                        }
+                        .onEnded { _ in
+                            if let value = dragValue {
+                                onSeek(value)
+                            }
+                            dragValue = nil
+                        }
+                )
             }
-            HapticManager.shared.triggerImpact(style: .medium)
+            .frame(height: 24)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
+
+            HStack {
+                Text(PlayerTimeFormatter.string(from: shown))
+                Spacer()
+                Text(duration > 0 ? "−" + PlayerTimeFormatter.string(from: max(total - shown, 0)) : "--:--")
+            }
+            .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
+            .foregroundColor(.white.opacity(isActive ? 0.9 : 0.5))
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Позиция воспроизведения")
+        .accessibilityValue("\(PlayerTimeFormatter.string(from: shown)) из \(PlayerTimeFormatter.string(from: duration))")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onSeek(min(current + 15, duration))
+            case .decrement: onSeek(max(current - 15, 0))
+            @unknown default: break
+            }
         }
     }
+}
+
+// MARK: - Стиль кнопок транспорта (подсветка круга при нажатии)
+
+private struct TransportButtonStyle: ButtonStyle {
+    var diameter: CGFloat = 60
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: diameter, height: diameter)
+            .background(
+                Circle().fill(Color.white.opacity(configuration.isPressed ? 0.14 : 0))
+            )
+            .contentShape(Circle())
+            .scaleEffect(configuration.isPressed ? 0.86 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Винил
+
+/// Виниловая пластинка с плавным вращением и тонармом (базовый размер 290×290)
+private struct VinylStageView: View {
+    let image: UIImage?
+    let title: String
+    let isPlaying: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+                .background(
+                    VisualEffectBlur(material: .systemUltraThinMaterialDark)
+                        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(Color.white.opacity(0.09), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.45), radius: 18, x: 0, y: 10)
+
+            ZStack {
+                Circle()
+                    .fill(
+                        AngularGradient(
+                            colors: [Color(white: 0.08), Color(white: 0.2), Color(white: 0.06), Color(white: 0.18), Color(white: 0.08)],
+                            center: .center
+                        )
+                    )
+                    .frame(width: 250, height: 250)
+                    .shadow(color: .black.opacity(0.6), radius: 10, x: 0, y: 6)
+
+                ForEach(0..<12) { i in
+                    Circle()
+                        .stroke(Color.white.opacity(0.05), lineWidth: 0.6)
+                        .frame(width: CGFloat(110 + i * 11), height: CGFloat(110 + i * 11))
+                }
+
+                ZStack {
+                    if let image = image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Color(white: 0.14)
+                        Text(String(title.first ?? "M").uppercased())
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(width: 96, height: 96)
+                .clipShape(Circle())
+
+                Circle()
+                    .fill(LinearGradient(colors: [.white, .gray], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 12, height: 12)
+                Circle()
+                    .fill(Color.black)
+                    .frame(width: 4, height: 4)
+            }
+            .modifier(SpinningModifier(isPlaying: isPlaying))
+
+            // Блик на пластинке остаётся неподвижным — добавляет объём
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.10), .clear, Color.white.opacity(0.05)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 250, height: 250)
+                .allowsHitTesting(false)
+
+            TonearmView(isPlaying: isPlaying)
+                .offset(x: 95, y: -75)
+        }
+        .frame(width: 290, height: 290)
+    }
+}
+
+/// Плавное вращение на базе TimelineView (без таймера, перерисовывающего весь экран)
+private struct SpinningModifier: ViewModifier {
+    let isPlaying: Bool
+    var degreesPerSecond: Double = 18
+
+    @State private var baseAngle: Double = 0
+    @State private var startDate: Date? = nil
+
+    func body(content: Content) -> some View {
+        TimelineView(.animation(minimumInterval: nil, paused: !isPlaying)) { context in
+            content.rotationEffect(.degrees(angle(at: context.date)))
+        }
+        .onAppear {
+            if isPlaying { startDate = Date() }
+        }
+        .onChange(of: isPlaying) { playing in
+            if playing {
+                startDate = Date()
+            } else if let start = startDate {
+                baseAngle += Date().timeIntervalSince(start) * degreesPerSecond
+                startDate = nil
+            }
+        }
+    }
+
+    private func angle(at date: Date) -> Double {
+        guard let start = startDate else { return baseAngle }
+        return baseAngle + date.timeIntervalSince(start) * degreesPerSecond
+    }
+}
+
+// MARK: - Свечение в такт басу
+
+private final class VisualizerHolder: ObservableObject {
+    let engine = VisualizerEngine()
+}
+
+private struct BassReactiveGlow: View {
+    @ObservedObject var engine: VisualizerEngine
+    let tint: Color
+    let isPlaying: Bool
+
+    var body: some View {
+        let bass = isPlaying ? engine.heights[0] : 0.05
+
+        Circle()
+            .fill(tint.opacity(0.16 + Double(bass) * 0.22))
+            .frame(width: 340, height: 340)
+            .scaleEffect(1.0 + bass * 0.12)
+            .blur(radius: 90)
+    }
+}
+
+// MARK: - Очередь воспроизведения
+
+struct QueueSheetView: View {
+    @ObservedObject var playerManager = AudioPlayerManager.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(Array(playerManager.playlist.enumerated()), id: \.offset) { index, track in
+                        let isCurrent = track.id == playerManager.currentTrack?.id
+
+                        Button {
+                            HapticManager.shared.triggerImpact(style: .light)
+                            if !isCurrent {
+                                playerManager.play(track: track, in: playerManager.playlist)
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                QueueArtwork(track: track)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(track.title)
+                                        .font(.system(size: 15, weight: isCurrent ? .bold : .medium))
+                                        .foregroundColor(.white)
+                                        .lineLimit(1)
+                                    Text(track.artist)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.5))
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                if isCurrent {
+                                    MiniVisualizerView(
+                                        isPlaying: playerManager.playbackState == .playing,
+                                        tintColor: .white
+                                    )
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .listRowBackground(isCurrent ? Color.white.opacity(0.10) : Color.clear)
+                        .id(index)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .onAppear {
+                    if let index = playerManager.playlist.firstIndex(where: { $0.id == playerManager.currentTrack?.id }) {
+                        proxy.scrollTo(index, anchor: .center)
+                    }
+                }
+            }
+            .background(Color(white: 0.06).ignoresSafeArea())
+            .navigationTitle("Очередь")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }
+                        .foregroundColor(.white)
+                }
+            }
+            .overlay {
+                if playerManager.playlist.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 36))
+                        Text("Очередь пуста")
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                    .foregroundColor(.white.opacity(0.4))
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct QueueArtwork: View {
+    let track: PlayerTrack
+
+    var body: some View {
+        Group {
+            if let coverURL = track.localCoverURL, let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
+                RemoteCoverLoader(
+                    trackId: track.id,
+                    sourceName: track.sourceName,
+                    width: 44,
+                    height: 44,
+                    cornerRadius: 8
+                )
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+        }
+    }
+}
+
+// MARK: - AirPlay
+
+struct AirPlayRoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView()
+        view.tintColor = UIColor.white.withAlphaComponent(0.7)
+        view.activeTintColor = .white
+        view.prioritizesVideoDevices = false
+        return view
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 
 // MARK: - Системный VolumeSlider
@@ -781,18 +952,21 @@ struct PlayerDetailView: View {
 struct SystemVolumeSlider: UIViewRepresentable {
     func makeUIView(context: Context) -> MPVolumeView {
         let volumeView = MPVolumeView()
-        
-        // Кастомизация внешнего вида слайдера громкости под дизайн
-        if let slider = volumeView.subviews.first(where: { $0 is UISlider }) as? UISlider {
-            slider.minimumTrackTintColor = .cyan
-            slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.12)
-            slider.thumbTintColor = .white
+        volumeView.showsRouteButton = false // AirPlay вынесен в нижнюю панель
+
+        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 14, height: 14)).image { ctx in
+            UIColor.white.setFill()
+            ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 14, height: 14))
         }
-        
-        volumeView.showsRouteButton = false // Скрываем стандартную кнопку AirPlay, так как у нас свой оверлей
+        volumeView.setVolumeThumbImage(thumb, for: .normal)
+
+        if let slider = volumeView.subviews.first(where: { $0 is UISlider }) as? UISlider {
+            slider.minimumTrackTintColor = .white
+            slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.18)
+        }
         return volumeView
     }
-    
+
     func updateUIView(_ uiView: MPVolumeView, context: Context) {}
 }
 
@@ -1016,13 +1190,5 @@ struct TonearmView: View {
             .rotationEffect(.degrees(isPlaying ? 25 : -5), anchor: .top)
             .animation(.spring(response: 1.0, dampingFraction: 0.75, blendDuration: 0), value: isPlaying)
         }
-    }
-}
-
-private struct ScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.90 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
