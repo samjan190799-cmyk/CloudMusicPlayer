@@ -1,0 +1,50 @@
+name: YouTube Smoke Test
+
+# Проверяет YouTube-функции приложения на живой сети с macOS-раннера:
+# поиск, пагинацию, чарты, извлечение потока YouTubeKit, скачивание и открытие в AVFoundation.
+on:
+  workflow_dispatch:
+    inputs:
+      video_ids:
+        description: "Дополнительные videoId через пробел (необязательно)"
+        required: false
+        default: ""
+  push:
+    branches: [ "main", "claude/**" ]
+    paths:
+      - "Sources/Services/YouTubeService.swift"
+      - "Sources/Services/AudioFileSniffer.swift"
+      - "Tools/YouTubeSmokeTest/**"
+      - ".github/workflows/youtube-smoke-test.yml"
+  schedule:
+    - cron: "17 6 * * *" # ежедневно: YouTube меняет API без предупреждения
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: YouTube smoke test (macOS)
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Select Latest Xcode
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          swift --version
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: Tools/YouTubeSmokeTest/.build
+          key: ${{ runner.os }}-yt-smoke-${{ hashFiles('Tools/YouTubeSmokeTest/Package.swift') }}
+
+      - name: Run smoke test
+        env:
+          VIDEO_IDS: ${{ github.event.inputs.video_ids }}
+        run: ./Tools/YouTubeSmokeTest/run.sh $VIDEO_IDS

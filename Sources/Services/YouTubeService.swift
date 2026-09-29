@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import YouTubeKit
 
 /// Модель трека с YouTube
