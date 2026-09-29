@@ -15,3 +15,4 @@
 * **Производительность анимаций:** Вращение винила — через `TimelineView` (`SpinningModifier`), движок визуализации хранится в `VisualizerHolder`, чтобы обновления 30 fps не перерисовывали весь экран.
 * **Заголовки googlevideo:** Не подменять `User-Agent`/`X-Goog-Visitor-Id` для запросов YouTubeKit и для потоков googlevideo — ссылки подписаны под клиент, выбранный YouTubeKit. Глобальный `URLProtocol`-перехватчик удалён именно по этой причине.
 * **Формат файлов:** Расширение скачанных/кэшированных файлов определять по сигнатуре (`AudioFileSniffer`): YouTube отдаёт M4A, и AVPlayer не открывает его под расширением `.mp3`.
+* **Резерв для клипов лейблов:** Если YouTubeKit возвращает `extractError` (типично для официальных музыкальных клипов), `YouTubeService` сам запрашивает InnerTube `/player` клиентами ANDROID_VR → IOS и берёт прямую ссылку `audio/mp4`. Проверяется смоук-тестом `Tools/YouTubeSmokeTest` (workflow «YouTube Smoke Test»).
