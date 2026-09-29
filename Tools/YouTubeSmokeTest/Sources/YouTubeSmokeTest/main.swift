@@ -122,10 +122,18 @@ videoIds += service.tracks.prefix(3).map(\.id)
 videoIds = videoIds.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
 
 var extractedCount = 0
+var botBlockedCount = 0
 for videoId in videoIds {
     let started = Date()
     guard let streamURL = await audioURL(for: videoId) else {
-        check(false, "[\(videoId)] Извлечение аудиопотока", "YouTubeKit не вернул ссылку")
+        let reason = service.lastExtractionFailureReason(for: videoId) ?? "YouTubeKit не вернул ссылку"
+        if reason.localizedCaseInsensitiveContains("not a bot") {
+            // Антибот-проверка YouTube для IP дата-центров GitHub: код отработал верно, на телефоне её обычно нет
+            botBlockedCount += 1
+            warn("[\(videoId)] YouTube требует подтверждения «не бот» для IP раннера — пропущено (\(reason))")
+        } else {
+            check(false, "[\(videoId)] Извлечение аудиопотока", reason)
+        }
         continue
     }
     extractedCount += 1
@@ -166,7 +174,10 @@ for videoId in videoIds {
     }
 }
 
-if extractedCount == 0 && !service.tracks.isEmpty {
+// Хотя бы одно видео должно извлекаться, иначе проверка потоков ничего не доказывает
+check(extractedCount > 0, "Хотя бы один поток извлечён и проверен", "YouTube заблокировал все запросы с раннера")
+
+if extractedCount == 0 && !service.tracks.isEmpty && botBlockedCount == 0 {
     warn("Поиск работает, но ни один поток не извлечён. На серверах GitHub YouTube часто требует " +
          "«подтвердите, что вы не бот» для IP дата-центров — на телефоне результат может отличаться. " +
          "Смотрите сообщения YouTubeKit выше.")

@@ -74,6 +74,13 @@ class YouTubeService: ObservableObject {
     private let streamTTL: TimeInterval = 3600 // 1 час (ссылки googlevideo живут от 2 до 6 часов)
     // Ожидающие завершения извлечения (videoId -> колбэки), защищено cacheLock
     private var pendingAudioRequests: [String: [(URL?) -> Void]] = [:]
+    // Последняя причина отказа YouTube по videoId (для диагностики и смоук-теста), защищено cacheLock
+    private var extractionFailureReasons: [String: String] = [:]
+
+    /// Причина, по которой YouTube не отдал поток (например, «Sign in to confirm you’re not a bot»)
+    func lastExtractionFailureReason(for videoId: String) -> String? {
+        cacheLock.withLock { extractionFailureReasons[videoId] }
+    }
 
     private init() {
         // Автоматически загружаем Чарты при старте приложения
@@ -285,6 +292,7 @@ class YouTubeService: ObservableObject {
             guard playabilityStatus == "OK" else {
                 let reason = playability?["reason"] as? String ?? ""
                 print("YouTubeService: InnerTube \(client.name) → \(playabilityStatus) \(reason) для \(videoId)")
+                cacheLock.withLock { extractionFailureReasons[videoId] = "\(playabilityStatus): \(reason)" }
                 return nil
             }
 
