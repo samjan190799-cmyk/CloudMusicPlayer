@@ -546,7 +546,10 @@ class AudioPlayerManager: NSObject, ObservableObject {
                 guard let self = self else { return }
                 guard self.currentTrack?.id == track.id else { return }
                 
-                if let audioUrl = audioUrl {
+                if let audioUrl = audioUrl, YouTubeService.shared.requiresDownloadBeforePlayback(audioUrl) {
+                    // Ссылку резервного клиента AVPlayer не открывает — играем скачанный файл
+                    self.playViaTemporaryFile(track: track, remoteURL: audioUrl)
+                } else if let audioUrl = audioUrl {
                     print("AudioPlayer: получен аудио URL: \(audioUrl.absoluteString.prefix(100))...")
                     
                     // Без подмены User-Agent: ссылка googlevideo подписана под клиент YouTubeKit,
@@ -793,6 +796,57 @@ class AudioPlayerManager: NSObject, ObservableObject {
 
 
     
+    /// Скачивает поток во временный файл и играет его (для ссылок, которые AVPlayer не открывает напрямую)
+    private func playViaTemporaryFile(track: PlayerTrack, remoteURL: URL) {
+        print("AudioPlayer: ⬇️ Скачиваем трек перед воспроизведением: \(track.id)")
+        Task { [weak self] in
+            let fileURL = await AudioPlayerManager.downloadToTemporaryFile(remoteURL, trackId: track.id)
+            await MainActor.run {
+                guard let self = self, self.currentTrack?.id == track.id else { return }
+                guard let fileURL = fileURL else {
+                    YouTubeService.shared.invalidateStreamCache(for: track.id)
+                    self.playbackState = .stopped
+                    self.isBuffering = false
+                    self.showPlaybackError("Не удалось загрузить «\(track.title)» с YouTube. Попробуйте ещё раз.")
+                    self.endBackgroundTask()
+                    return
+                }
+                try? AVAudioSession.sharedInstance().setActive(true)
+                self.setupPlayer(with: AVPlayerItem(url: fileURL), track: track)
+            }
+        }
+    }
+
+    private static func downloadToTemporaryFile(_ url: URL, trackId: String) async -> URL? {
+        let fileManager = FileManager.default
+        let folder = fileManager.temporaryDirectory.appendingPathComponent("YouTubeStreams", isDirectory: true)
+        try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        // Уже скачивали в этой сессии
+        let baseName = trackId.uuidCompatible
+        if let existing = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?
+            .first(where: { $0.deletingPathExtension().lastPathComponent == baseName }) {
+            return existing
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 60
+            let (tempURL, response) = try await URLSession.shared.download(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                return nil
+            }
+            let ext = AudioFileSniffer.fileExtension(for: tempURL, fallback: "m4a")
+            let destination = folder.appendingPathComponent("\(baseName).\(ext)")
+            try? fileManager.removeItem(at: destination)
+            try fileManager.moveItem(at: tempURL, to: destination)
+            return destination
+        } catch {
+            print("AudioPlayer: ❌ Не удалось скачать поток: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     private func showPlaybackError(_ message: String) {
         playbackErrorMessage = message
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in

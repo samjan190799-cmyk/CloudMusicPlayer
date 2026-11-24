@@ -79,6 +79,8 @@ class YouTubeService: ObservableObject {
     // Метаданные известных треков (videoId -> трек), защищено cacheLock.
     // Нужны, чтобы найти другую загрузку той же песни, если YouTube не отдал поток.
     private var knownTracks: [String: YouTubeTrack] = [:]
+    // Ссылки резервного клиента: AVPlayer не открывает их напрямую, их нужно сначала скачать (защищено cacheLock)
+    private var downloadBeforePlaybackURLs: Set<URL> = []
 
     // Кэш прямых аудиопотоков (videoId -> (URL, Date))
     private var streamCache: [String: (url: URL, date: Date)] = [:]
@@ -151,7 +153,7 @@ class YouTubeService: ObservableObject {
         if isAlreadyRunning { return }
 
         Task {
-            // 1. YouTubeKit и прямой запрос плеера InnerTube — кто первым вернёт рабочую ссылку
+            // 1. YouTubeKit, затем прямой запрос плеера InnerTube
             var resolvedURL = await self.resolveStreamURL(for: videoId)
 
             // 2. Видео недоступно (например, официальный клип лейбла) — пробуем другую
@@ -208,13 +210,6 @@ class YouTubeService: ObservableObject {
             self.continuation = continuation
         }
 
-        /// Результат уже отдан
-        var isResolved: Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            return continuation == nil
-        }
-
         /// - Returns: `true`, если именно этот вызов возобновил continuation
         @discardableResult
         func resume(with url: URL?) -> Bool {
@@ -259,10 +254,21 @@ class YouTubeService: ObservableObject {
         for client in Self.fallbackPlayerClients {
             if let url = await requestPlayer(videoId: videoId, client: client) {
                 print("YouTubeService: ✅ Аудио URL через InnerTube \(client.name): \(videoId)")
+                cacheLock.withLock { _ = downloadBeforePlaybackURLs.insert(url) }
                 return url
             }
         }
         return nil
+    }
+
+    /// Ссылку нельзя отдать AVPlayer как поток — сначала скачать файл целиком (см. смоук-тест)
+    func requiresDownloadBeforePlayback(_ url: URL) -> Bool {
+        cacheLock.withLock { downloadBeforePlaybackURLs.contains(url) }
+    }
+
+    /// Прямой запрос плеера InnerTube в обход YouTubeKit (для смоук-теста)
+    func fallbackAudioURL(for videoId: String) async -> URL? {
+        await fetchAudioURLViaInnerTubePlayer(videoId: videoId)
     }
 
     private func requestPlayer(videoId: String, client: PlayerClient) async -> URL? {
@@ -1049,36 +1055,16 @@ class YouTubeService: ObservableObject {
         }
     }
 
-    /// YouTubeKit и прямой запрос плеера InnerTube: YouTubeKit получает фору в 3 секунды,
-    /// затем параллельно стартует запрос плеера. Берём первую рабочую ссылку.
+    /// Сначала YouTubeKit, затем прямой запрос плеера InnerTube.
+    /// Порядок важен: ссылки YouTubeKit открываются в AVPlayer, а ссылки резервного клиента
+    /// AVFoundation открыть не может (проверено смоук-тестом) — годятся в основном для скачивания.
     private func resolveStreamURL(for videoId: String) async -> URL? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<URL?, Never>) in
-            let gate = ResumeGate(continuation)
-            let attempts = AttemptCounter(2)
-
-            Task {
-                let url = await self.extractAudioURL(for: videoId, timeout: 20)
-                if let url = url, gate.resume(with: url) {
-                    print("YouTubeService: ✅ Аудио URL через YouTubeKit: \(videoId)")
-                }
-                if attempts.finishOne() {
-                    gate.resume(with: nil)
-                }
-            }
-
-            Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                if !gate.isResolved {
-                    let url = await self.fetchAudioURLViaInnerTubePlayer(videoId: videoId)
-                    if let url = url {
-                        gate.resume(with: url)
-                    }
-                }
-                if attempts.finishOne() {
-                    gate.resume(with: nil)
-                }
-            }
+        if let url = await extractAudioURL(for: videoId, timeout: 20) {
+            print("YouTubeService: ✅ Аудио URL через YouTubeKit: \(videoId)")
+            return url
         }
+        // Официальные клипы лейблов YouTubeKit часто не отдаёт (extractError)
+        return await fetchAudioURLViaInnerTubePlayer(videoId: videoId)
     }
 
     /// Ищет ту же песню в каталоге YouTube Music (совпадение по длительности) и берёт её поток
@@ -1123,23 +1109,5 @@ class YouTubeService: ObservableObject {
             return cleanTitle
         }
         return "\(cleanArtist) \(cleanTitle)"
-    }
-
-    /// Счётчик завершившихся попыток (потокобезопасный)
-    private final class AttemptCounter: @unchecked Sendable {
-        private let lock = NSLock()
-        private var remaining: Int
-
-        init(_ count: Int) {
-            remaining = count
-        }
-
-        /// - Returns: `true`, когда завершилась последняя попытка
-        func finishOne() -> Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            remaining -= 1
-            return remaining == 0
-        }
     }
 }

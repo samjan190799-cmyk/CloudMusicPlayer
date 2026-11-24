@@ -53,6 +53,29 @@ func audioURL(for videoId: String) async -> URL? {
 
 let service = YouTubeService.shared
 
+/// Как плеер приложения поступает со ссылками резервного клиента: скачивает файл целиком и открывает локально
+func downloadAndOpenLocally(_ url: URL, name: String) async -> (ok: Bool, detail: String) {
+    do {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 90
+        let (tempURL, response) = try await URLSession.shared.download(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else { return (false, "HTTP \(status)") }
+        let ext = AudioFileSniffer.fileExtension(for: tempURL, fallback: "m4a")
+        let local = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).\(ext)")
+        try? FileManager.default.removeItem(at: local)
+        try FileManager.default.moveItem(at: tempURL, to: local)
+        defer { try? FileManager.default.removeItem(at: local) }
+        let size = (try? FileManager.default.attributesOfItem(atPath: local.path)[.size] as? Int) ?? 0
+        let asset = AVURLAsset(url: local)
+        let (isPlayable, duration) = try await asset.load(.isPlayable, .duration)
+        let seconds = CMTimeGetSeconds(duration)
+        return (isPlayable && seconds > 0, ".\(ext), \(size / 1024) КБ, \(Int(seconds)) с, playable=\(isPlayable)")
+    } catch {
+        return (false, error.localizedDescription)
+    }
+}
+
 // MARK: - 1. Определение формата файла (AudioFileSniffer)
 
 section("AudioFileSniffer")
@@ -208,15 +231,20 @@ for videoId in videoIds {
         check(false, "[\(videoId)] Скачивание фрагмента", error.localizedDescription)
     }
 
-    // Открываем поток так же, как плеер приложения
-    let asset = AVURLAsset(url: streamURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: false])
-    do {
-        let (isPlayable, duration) = try await asset.load(.isPlayable, .duration)
-        let seconds = CMTimeGetSeconds(duration)
-        check(isPlayable && seconds > 0, "[\(videoId)] AVFoundation открывает поток",
-              "playable=\(isPlayable), duration=\(seconds)")
-    } catch {
-        check(false, "[\(videoId)] AVFoundation открывает поток", error.localizedDescription)
+    // Открываем так же, как плеер приложения: ссылки резервного клиента он сначала скачивает
+    if service.requiresDownloadBeforePlayback(streamURL) {
+        let result = await downloadAndOpenLocally(streamURL, name: videoId)
+        check(result.ok, "[\(videoId)] Ссылка резервного клиента: скачанный файл играет в AVFoundation", result.detail)
+    } else {
+        let asset = AVURLAsset(url: streamURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: false])
+        do {
+            let (isPlayable, duration) = try await asset.load(.isPlayable, .duration)
+            let seconds = CMTimeGetSeconds(duration)
+            check(isPlayable && seconds > 0, "[\(videoId)] AVFoundation открывает поток",
+                  "playable=\(isPlayable), duration=\(seconds)")
+        } catch {
+            check(false, "[\(videoId)] AVFoundation открывает поток", error.localizedDescription)
+        }
     }
 }
 
@@ -227,6 +255,19 @@ if extractedCount == 0 && !service.tracks.isEmpty && botBlockedCount == 0 {
     warn("Поиск работает, но ни один поток не извлечён. На серверах GitHub YouTube часто требует " +
          "«подтвердите, что вы не бот» для IP дата-центров — на телефоне результат может отличаться. " +
          "Смотрите сообщения YouTubeKit выше.")
+}
+
+// MARK: - 5a. Резервный клиент: скачать целиком и играть файл
+
+section("Резервный клиент")
+if let fallbackURL = await service.fallbackAudioURL(for: "dQw4w9WgXcQ") {
+    check(service.requiresDownloadBeforePlayback(fallbackURL), "Ссылка резервного клиента помечена «сначала скачать»")
+    let result = await downloadAndOpenLocally(fallbackURL, name: "fallback-dQw4w9WgXcQ")
+    check(result.ok, "Скачанный файл резервного клиента играет в AVFoundation", result.detail)
+    print("   \(result.detail)")
+} else {
+    let reason = service.lastExtractionFailureReason(for: "dQw4w9WgXcQ") ?? "нет ссылки"
+    warn("Резервный клиент не вернул ссылку (\(reason)) — проверка скачивания пропущена")
 }
 
 // MARK: - 6. Объединение одновременных запросов
