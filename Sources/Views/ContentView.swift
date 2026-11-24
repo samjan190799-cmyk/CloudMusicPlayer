@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Корневой экран: вкладки, плавающий мини-плеер, полноэкранный плеер и общие листы
 struct ContentView: View {
@@ -48,6 +49,9 @@ struct ContentView: View {
         }
         .onChange(of: router.selectedTab) { tab in
             visitedTabs.insert(tab)
+        }
+        .onReceive(DownloadManager.shared.$downloadErrorMessage.compactMap { $0 }.receive(on: DispatchQueue.main)) { message in
+            router.showToast(message, icon: "exclamationmark.triangle.fill")
         }
         .onChange(of: status.hasTrack) { hasTrack in
             if !hasTrack {

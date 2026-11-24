@@ -70,6 +70,16 @@ class DownloadManager: NSObject, ObservableObject {
     
     @Published var localTracks: [LocalTrack] = []
     @Published var activeDownloads: [String: Double] = [:] // ID трека -> Прогресс (0.0 ... 1.0)
+    /// Неудачные загрузки (ID трека -> причина) — кнопка показывает «Повторить»
+    @Published var failedDownloads: [String: String] = [:]
+    /// Последнее сообщение об ошибке загрузки для показа пользователю
+    @Published var downloadErrorMessage: String? = nil
+
+    // Состояние загрузок YouTube (только главный поток)
+    private var preparingTitles: [String: String] = [:]      // ссылка ещё извлекается
+    private var cancelledPreparing: Set<String> = []          // отменены до начала скачивания
+    private var youTubeDownloadMeta: [String: YouTubeTrack] = [:]
+    private var youTubeRetried: Set<String> = []              // уже был автоповтор после ошибки сервера
     
     private let libraryFileName = "Library.json"
     private let offlineFolder = "OfflineMusic"
@@ -100,7 +110,8 @@ class DownloadManager: NSObject, ObservableObject {
                     list.append(ActiveDownload(id: trackId, title: title, source: source, progress: progress))
                 }
             } else {
-                list.append(ActiveDownload(id: trackId, title: "Загрузка...", source: .youtube, progress: progress))
+                let title = preparingTitles[trackId] ?? "Загрузка..."
+                list.append(ActiveDownload(id: trackId, title: title, source: .youtube, progress: progress))
             }
         }
         return list.sorted { $0.title < $1.title }
@@ -111,8 +122,23 @@ class DownloadManager: NSObject, ObservableObject {
             task.cancel()
         }
         DispatchQueue.main.async {
+            if self.preparingTitles.removeValue(forKey: trackId) != nil {
+                self.cancelledPreparing.insert(trackId)
+            }
             self.activeDownloads.removeValue(forKey: trackId)
             self.downloadTasks.removeValue(forKey: trackId)
+            self.youTubeDownloadMeta.removeValue(forKey: trackId)
+        }
+    }
+
+    /// Отмечает загрузку неудачной и сообщает пользователю
+    private func markFailed(trackId: String, title: String, reason: String) {
+        DispatchQueue.main.async {
+            self.activeDownloads.removeValue(forKey: trackId)
+            self.downloadTasks.removeValue(forKey: trackId)
+            self.preparingTitles.removeValue(forKey: trackId)
+            self.failedDownloads[trackId] = reason
+            self.downloadErrorMessage = "Не удалось скачать «\(title)»: \(reason)"
         }
     }
     
@@ -250,6 +276,9 @@ class DownloadManager: NSObject, ObservableObject {
         if let progress = activeDownloads[trackId] {
             return .downloading(progress: progress)
         }
+        if let reason = failedDownloads[trackId] {
+            return .failed(error: reason)
+        }
         return .notDownloaded
     }
     
@@ -285,27 +314,63 @@ class DownloadManager: NSObject, ObservableObject {
     
     /// Запуск загрузки трека с YouTube
     func downloadYouTubeTrack(_ track: YouTubeTrack) {
+        if Thread.isMainThread {
+            beginYouTubeDownload(track, isRetry: false)
+        } else {
+            DispatchQueue.main.async { self.beginYouTubeDownload(track, isRetry: false) }
+        }
+    }
+
+    /// Вызывается только на главном потоке
+    private func beginYouTubeDownload(_ track: YouTubeTrack, isRetry: Bool) {
         let trackId = track.id
-        guard activeDownloads[trackId] == nil else { return }
-        
+        guard isRetry || activeDownloads[trackId] == nil else { return }
+        guard !isDownloaded(trackId: trackId) else { return }
+
+        // Индикатор появляется сразу: извлечение ссылки может занять несколько секунд
+        activeDownloads[trackId] = 0.0
+        preparingTitles[trackId] = track.title
+        failedDownloads.removeValue(forKey: trackId)
+        cancelledPreparing.remove(trackId)
+        youTubeDownloadMeta[trackId] = track
+        if !isRetry {
+            youTubeRetried.remove(trackId)
+        }
+
+        // Название и длительность помогут найти другую загрузку песни, если ролик недоступен
+        YouTubeService.shared.rememberTrack(track)
+
         YouTubeService.shared.getAudioURL(for: trackId) { [weak self] audioUrl in
-            guard let audioUrl = audioUrl else {
-                print("Не удалось получить ссылку для скачивания с YouTube")
-                return
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                // Пользователь отменил загрузку, пока извлекалась ссылка
+                if self.cancelledPreparing.remove(trackId) != nil {
+                    return
+                }
+                self.preparingTitles.removeValue(forKey: trackId)
+
+                guard let audioUrl = audioUrl else {
+                    print("DownloadManager: ❌ YouTube не отдал ссылку для \(trackId)")
+                    self.markFailed(trackId: trackId, title: track.title, reason: "YouTube не отдал этот трек")
+                    return
+                }
+
+                // Повторное нажатие во время извлечения ссылки не должно запускать вторую загрузку
+                guard self.downloadTasks[trackId] == nil, !self.isDownloaded(trackId: trackId) else { return }
+
+                // Ссылка googlevideo уже подписана под клиент YouTubeKit — чужой User-Agent может дать 403
+                let request = URLRequest(url: audioUrl)
+                self.startDownload(
+                    trackId: trackId,
+                    title: track.title,
+                    source: .youtube,
+                    request: request,
+                    size: 0,
+                    artist: track.uploader,
+                    duration: Double(track.duration),
+                    thumbnailUrl: track.thumbnailUrl
+                )
             }
-            
-            // Ссылка googlevideo уже подписана под клиент YouTubeKit — чужой User-Agent может дать 403
-            let request = URLRequest(url: audioUrl)
-            self?.startDownload(
-                trackId: trackId,
-                title: track.title,
-                source: .youtube,
-                request: request,
-                size: 0,
-                artist: track.uploader,
-                duration: Double(track.duration),
-                thumbnailUrl: track.thumbnailUrl
-            )
         }
     }
     
@@ -390,8 +455,17 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 YouTubeService.shared.invalidateStreamCache(for: trackId)
             }
             DispatchQueue.main.async {
-                self.activeDownloads.removeValue(forKey: trackId)
                 self.downloadTasks.removeValue(forKey: trackId)
+                // Ссылка YouTube могла устареть — один раз пробуем заново со свежей
+                if source == .youtube,
+                   let meta = self.youTubeDownloadMeta[trackId],
+                   !self.youTubeRetried.contains(trackId) {
+                    self.youTubeRetried.insert(trackId)
+                    print("DownloadManager: 🔄 Повторная загрузка \(trackId) со свежей ссылкой")
+                    self.beginYouTubeDownload(meta, isRetry: true)
+                } else {
+                    self.markFailed(trackId: trackId, title: title, reason: "сервер отклонил запрос")
+                }
             }
             return
         }
@@ -439,6 +513,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
                     self.saveLibrary()
                     self.activeDownloads.removeValue(forKey: trackId)
                     self.downloadTasks.removeValue(forKey: trackId)
+                    self.failedDownloads.removeValue(forKey: trackId)
+                    self.youTubeDownloadMeta.removeValue(forKey: trackId)
+                    self.youTubeRetried.remove(trackId)
                 }
             }
             
@@ -520,11 +597,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
              let components = taskDescription.components(separatedBy: ":::")
              guard components.count >= 1 else { return }
              let trackId = components[0]
+             let title = components.count >= 2 ? components[1] : "трек"
              
-             DispatchQueue.main.async {
-                 self.activeDownloads.removeValue(forKey: trackId)
-                 self.downloadTasks.removeValue(forKey: trackId)
-            }
+             if (error as NSError).code == NSURLErrorCancelled {
+                 DispatchQueue.main.async {
+                     self.activeDownloads.removeValue(forKey: trackId)
+                     self.downloadTasks.removeValue(forKey: trackId)
+                 }
+             } else {
+                 markFailed(trackId: trackId, title: title, reason: "проверьте подключение к интернету")
+             }
         }
     }
     

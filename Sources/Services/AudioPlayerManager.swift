@@ -534,6 +534,14 @@ class AudioPlayerManager: NSObject, ObservableObject {
         else if track.sourceName.contains("YouTube") || track.sourceName == "Аудиокниги" {
             print("AudioPlayer: запрос аудио URL для YouTube/Аудиокниги трека: \(track.id) — \(track.title)")
             
+            // Название и длительность нужны, чтобы при недоступном ролике найти другую загрузку песни
+            YouTubeService.shared.rememberTrack(YouTubeTrack(
+                id: track.id,
+                title: track.title,
+                uploader: track.artist,
+                duration: Int(track.duration ?? 0),
+                thumbnailUrl: ""
+            ))
             YouTubeService.shared.getAudioURL(for: track.id) { [weak self] audioUrl in
                 guard let self = self else { return }
                 guard self.currentTrack?.id == track.id else { return }

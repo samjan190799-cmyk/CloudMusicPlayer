@@ -36,6 +36,13 @@ struct PlaylistDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
+                    if let playlist = playlist, !playlist.tracks.isEmpty {
+                        Button {
+                            TrackActions.downloadAll(playlist.tracks.map { $0.toPlayerTrack() })
+                        } label: {
+                            Label("Скачать всё", systemImage: "arrow.down.circle")
+                        }
+                    }
                     Button {
                         showPhotoPicker = true
                     } label: {

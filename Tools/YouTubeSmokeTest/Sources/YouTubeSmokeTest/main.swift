@@ -107,6 +107,51 @@ if service.canLoadMore {
     warn("YouTube не вернул токен продолжения — пагинация не проверена")
 }
 
+// MARK: - 3a. Поиск песен YouTube Music
+
+section("Поиск песен YouTube Music")
+var musicSongIds: [String] = []
+if let songsPage = await service.searchMusicSongs(query: query) {
+    check(!songsPage.tracks.isEmpty, "Каталог песен вернул результаты", "пусто — возможно, изменилась разметка ответа")
+    check(songsPage.tracks.allSatisfy { $0.duration > 0 }, "У всех песен есть длительность")
+    check(songsPage.tracks.allSatisfy { !$0.uploader.isEmpty && $0.uploader != "YouTube Music" },
+          "У песен распознан исполнитель")
+    for song in songsPage.tracks.prefix(3) {
+        print("   \(song.title) — \(song.uploader) [\(song.id), \(song.duration)с]")
+    }
+    if let first = songsPage.tracks.first, !first.title.localizedCaseInsensitiveContains("sonne") {
+        warn("Первая песня не «Sonne»: \(first.title)")
+    }
+    musicSongIds = songsPage.tracks.prefix(1).map(\.id)
+
+    if let token = songsPage.nextToken {
+        if let nextPage = await service.searchMusicSongs(query: query, continuation: token) {
+            check(!nextPage.tracks.isEmpty, "Следующая страница песен", "пусто")
+            let firstIds = Set(songsPage.tracks.map(\.id))
+            let repeated = nextPage.tracks.filter { firstIds.contains($0.id) }.count
+            check(repeated < nextPage.tracks.count || nextPage.tracks.isEmpty, "Следующая страница песен не повторяет первую",
+                  "повторов: \(repeated)")
+        } else {
+            check(false, "Следующая страница песен", "сетевая ошибка")
+        }
+    } else {
+        warn("YouTube Music не вернул токен продолжения — догрузка песен не проверена")
+    }
+} else {
+    check(false, "Каталог песен YouTube Music отвечает", "сетевая ошибка или HTTP ≠ 200")
+}
+
+// search() параллельно наполняет и список песен для экрана поиска
+let songsPublished = await waitUntil(timeout: 20) { !service.songs.isEmpty || !service.isSongsLoading }
+check(songsPublished && !service.songs.isEmpty, "search() показывает песни на экране поиска", "songs пуст")
+
+check(YouTubeService.songSearchQuery(title: "Rammstein - Sonne (Official Video)", artist: "Rammstein Official") == "Rammstein - Sonne",
+      "Запрос для поиска другой загрузки очищается от «(Official Video)»",
+      YouTubeService.songSearchQuery(title: "Rammstein - Sonne (Official Video)", artist: "Rammstein Official"))
+check(YouTubeService.songSearchQuery(title: "Du hast", artist: "Rammstein - Topic") == "Rammstein Du hast",
+      "Запрос добавляет исполнителя без « - Topic»",
+      YouTubeService.songSearchQuery(title: "Du hast", artist: "Rammstein - Topic"))
+
 // MARK: - 4. Чарты (грузятся при создании сервиса)
 
 section("Чарты")
@@ -119,6 +164,7 @@ print("   треков в чарте: \(service.trendingTracks.count)")
 section("Аудиопотоки")
 var videoIds = ["dQw4w9WgXcQ"] + Array(CommandLine.arguments.dropFirst())
 videoIds += service.tracks.prefix(3).map(\.id)
+videoIds += musicSongIds // официальная аудиодорожка из каталога YouTube Music
 videoIds = videoIds.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
 
 var extractedCount = 0

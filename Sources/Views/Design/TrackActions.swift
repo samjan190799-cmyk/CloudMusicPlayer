@@ -30,9 +30,27 @@ enum TrackActions {
             || yandexTrack(for: track) != nil
     }
 
+    /// Скачивает всё, что ещё не сохранено. Возвращает число запущенных загрузок.
+    @discardableResult
+    static func downloadAll(_ tracks: [PlayerTrack]) -> Int {
+        var started = 0
+        for track in tracks where canDownload(track) {
+            if download(track, announce: false) {
+                started += 1
+            }
+        }
+        if started > 0 {
+            HapticManager.shared.triggerNotification(type: .success)
+            AppRouter.shared.showToast("Скачиваем \(Formatters.tracks(started))", icon: "arrow.down.circle.fill")
+        } else {
+            AppRouter.shared.showToast("Всё уже скачано", icon: "checkmark.circle.fill")
+        }
+        return started
+    }
+
     /// Запускает загрузку. Возвращает false, если источник не поддерживает скачивание.
     @discardableResult
-    static func download(_ track: PlayerTrack) -> Bool {
+    static func download(_ track: PlayerTrack, announce: Bool = true) -> Bool {
         let downloads = DownloadManager.shared
         if let youTube = youTubeTrack(for: track) {
             downloads.downloadYouTubeTrack(youTube)
@@ -43,8 +61,10 @@ enum TrackActions {
         } else {
             return false
         }
-        HapticManager.shared.triggerImpact(style: .light)
-        AppRouter.shared.showToast("Загрузка началась", icon: "arrow.down.circle.fill")
+        if announce {
+            HapticManager.shared.triggerImpact(style: .light)
+            AppRouter.shared.showToast("Загрузка началась", icon: "arrow.down.circle.fill")
+        }
         return true
     }
 

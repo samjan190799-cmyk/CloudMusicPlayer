@@ -62,11 +62,23 @@ class YouTubeService: ObservableObject {
     @Published var errorMessage: String?
     @Published var canLoadMore = false
 
+    // Песни из каталога YouTube Music (поиск с фильтром «Песни»)
+    @Published var songs: [YouTubeTrack] = []
+    @Published var isSongsLoading = false
+    @Published var canLoadMoreSongs = false
+
     private var currentQuery = ""
     private var currentPage = 1
     private var continuationToken: String? = nil
     private var searchTask: Task<Void, Never>?
     private var trendingTask: Task<Void, Never>?
+    private var songsQuery = ""
+    private var songsContinuation: String? = nil
+    private var songsTask: Task<Void, Never>?
+
+    // Метаданные известных треков (videoId -> трек), защищено cacheLock.
+    // Нужны, чтобы найти другую загрузку той же песни, если YouTube не отдал поток.
+    private var knownTracks: [String: YouTubeTrack] = [:]
 
     // Кэш прямых аудиопотоков (videoId -> (URL, Date))
     private var streamCache: [String: (url: URL, date: Date)] = [:]
@@ -139,14 +151,13 @@ class YouTubeService: ObservableObject {
         if isAlreadyRunning { return }
 
         Task {
-            // 1. YouTubeKit (web/visionOS клиенты + дешифровка подписи)
-            var resolvedURL = await self.extractAudioURL(for: videoId, timeout: 20)
-            if resolvedURL != nil {
-                print("YouTubeService: ✅ Аудио URL через YouTubeKit: \(videoId)")
-            } else {
-                // 2. Официальные клипы лейблов YouTubeKit часто не отдаёт (extractError) —
-                //    запрашиваем плеер InnerTube напрямую клиентами, которые возвращают готовые ссылки
-                resolvedURL = await self.fetchAudioURLViaInnerTubePlayer(videoId: videoId)
+            // 1. YouTubeKit и прямой запрос плеера InnerTube — кто первым вернёт рабочую ссылку
+            var resolvedURL = await self.resolveStreamURL(for: videoId)
+
+            // 2. Видео недоступно (например, официальный клип лейбла) — пробуем другую
+            //    загрузку той же песни из каталога YouTube Music
+            if resolvedURL == nil {
+                resolvedURL = await self.alternateUploadURL(for: videoId)
             }
 
             if let finalURL = resolvedURL {
@@ -195,6 +206,13 @@ class YouTubeService: ObservableObject {
 
         init(_ continuation: CheckedContinuation<URL?, Never>) {
             self.continuation = continuation
+        }
+
+        /// Результат уже отдан
+        var isResolved: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return continuation == nil
         }
 
         /// - Returns: `true`, если именно этот вызов возобновил continuation
@@ -516,6 +534,9 @@ class YouTubeService: ObservableObject {
         currentPage = 1
         continuationToken = nil
 
+        // Параллельно ищем песни в каталоге YouTube Music
+        searchSongs(query: q)
+
         DispatchQueue.main.async {
             self.isLoading = true
             self.errorMessage = nil
@@ -701,6 +722,7 @@ class YouTubeService: ObservableObject {
             }
         }
         
+        rememberTracks(extractedTracks)
         return (extractedTracks, nextContinuationToken)
     }
     
@@ -755,5 +777,369 @@ class YouTubeService: ObservableObject {
             return s
         }
         return 0
+    }
+    // MARK: - Поиск песен в каталоге YouTube Music
+
+    /// Фильтр «Песни» поиска YouTube Music (официальные аудиодорожки с исполнителем, альбомом и длительностью)
+    private static let musicSongsFilter = "EgWKAQIIAWoKEAoQAxAEEAkQBQ=="
+    private static let musicClientVersion = "1.20251110.01.00"
+
+    /// Поиск песен YouTube Music для экрана поиска (результаты — в `songs`)
+    func searchSongs(query: String) {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+
+        songsTask?.cancel()
+        songsQuery = q
+        songsContinuation = nil
+
+        DispatchQueue.main.async {
+            self.isSongsLoading = true
+            self.canLoadMoreSongs = false
+        }
+
+        songsTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await self.searchMusicSongs(query: q)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self.isSongsLoading = false
+                self.songs = result?.tracks ?? []
+                self.songsContinuation = result?.nextToken
+                self.canLoadMoreSongs = result?.nextToken != nil && !(result?.tracks.isEmpty ?? true)
+            }
+        }
+    }
+
+    /// Следующая страница песен
+    func loadMoreSongs() {
+        guard !isSongsLoading, canLoadMoreSongs, let token = songsContinuation, !songsQuery.isEmpty else { return }
+        let query = songsQuery
+
+        DispatchQueue.main.async { self.isSongsLoading = true }
+
+        songsTask?.cancel()
+        songsTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await self.searchMusicSongs(query: query, continuation: token)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self.isSongsLoading = false
+                guard let result = result else {
+                    self.canLoadMoreSongs = false
+                    return
+                }
+                let existing = Set(self.songs.map(\.id))
+                self.songs.append(contentsOf: result.tracks.filter { !existing.contains($0.id) })
+                self.songsContinuation = result.nextToken
+                self.canLoadMoreSongs = result.nextToken != nil && !result.tracks.isEmpty
+            }
+        }
+    }
+
+    /// Запрос к поиску YouTube Music с фильтром «Песни». Возвращает nil при сетевой ошибке.
+    func searchMusicSongs(query: String, continuation: String? = nil) async -> (tracks: [YouTubeTrack], nextToken: String?)? {
+        var urlString = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
+        if let token = continuation {
+            let encoded = Self.encodeQueryValue(token)
+            urlString += "&ctoken=\(encoded)&continuation=\(encoded)&type=next"
+        }
+        guard let url = URL(string: urlString) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("https://music.youtube.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://music.youtube.com/", forHTTPHeaderField: "Referer")
+        if let visitorData = UserDefaults.standard.string(forKey: "com.samvel.cloudmusicplayer.visitorData") {
+            request.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
+
+        let payload: [String: Any] = [
+            "context": [
+                "client": [
+                    "clientName": "WEB_REMIX",
+                    "clientVersion": Self.musicClientVersion,
+                    "hl": "ru",
+                    "gl": "RU"
+                ]
+            ],
+            "query": query,
+            "params": Self.musicSongsFilter
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard status == 200,
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("YouTubeService: YouTube Music поиск HTTP \(status)")
+                return nil
+            }
+            return parseMusicSearch(root: root)
+        } catch {
+            print("YouTubeService: YouTube Music поиск ошибка: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Разбор ответа YouTube Music. Обходим дерево целиком: Google часто меняет вложенность,
+    /// а сами элементы (`musicResponsiveListItemRenderer`) и токены продолжения стабильны.
+    private func parseMusicSearch(root: [String: Any]) -> (tracks: [YouTubeTrack], nextToken: String?) {
+        var items: [[String: Any]] = []
+        var tokens: [String] = []
+        for key in ["contents", "continuationContents", "onResponseReceivedCommands", "onResponseReceivedActions"] {
+            if let node = root[key] {
+                Self.collectMusicItems(node, items: &items, tokens: &tokens)
+            }
+        }
+
+        var seen = Set<String>()
+        var tracks: [YouTubeTrack] = []
+        for item in items {
+            guard let track = parseMusicItem(item), !seen.contains(track.id) else { continue }
+            seen.insert(track.id)
+            tracks.append(track)
+        }
+        rememberTracks(tracks)
+        return (tracks, tokens.first)
+    }
+
+    private static func collectMusicItems(_ node: Any, items: inout [[String: Any]], tokens: inout [String]) {
+        if let dict = node as? [String: Any] {
+            if let item = dict["musicResponsiveListItemRenderer"] as? [String: Any] {
+                items.append(item)
+                return
+            }
+            if let next = dict["nextContinuationData"] as? [String: Any],
+               let token = next["continuation"] as? String {
+                tokens.append(token)
+            }
+            if let command = dict["continuationCommand"] as? [String: Any],
+               let token = command["token"] as? String {
+                tokens.append(token)
+            }
+            // Ключи сортируем, чтобы порядок обхода (и выдачи) не зависел от словаря
+            for key in dict.keys.sorted() {
+                if let value = dict[key], value is [String: Any] || value is [Any] {
+                    collectMusicItems(value, items: &items, tokens: &tokens)
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                collectMusicItems(value, items: &items, tokens: &tokens)
+            }
+        }
+    }
+
+    /// Одна строка выдачи: «Название» и «Исполнитель • Альбом • 3:45»
+    private func parseMusicItem(_ item: [String: Any]) -> YouTubeTrack? {
+        guard let videoId = Self.musicItemVideoId(item) else { return nil }
+
+        let columns = item["flexColumns"] as? [[String: Any]] ?? []
+        func columnText(_ index: Int) -> String {
+            guard columns.indices.contains(index),
+                  let column = columns[index]["musicResponsiveListItemFlexColumnRenderer"] as? [String: Any],
+                  let text = column["text"] as? [String: Any] else { return "" }
+            if let runs = text["runs"] as? [[String: Any]] {
+                return runs.compactMap { $0["text"] as? String }.joined()
+            }
+            return text["simpleText"] as? String ?? ""
+        }
+
+        let title = columnText(0).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+
+        var parts = columnText(1)
+            .components(separatedBy: " • ")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var duration = 0
+        if let last = parts.last, last.contains(":") {
+            duration = parseDurationString(last)
+            if duration > 0 { parts.removeLast() }
+        }
+        if duration == 0, let fixed = (item["fixedColumns"] as? [[String: Any]])?.first,
+           let renderer = fixed["musicResponsiveListItemFixedColumnRenderer"] as? [String: Any],
+           let text = renderer["text"] as? [String: Any] {
+            let value = (text["runs"] as? [[String: Any]])?.compactMap { $0["text"] as? String }.joined()
+                ?? (text["simpleText"] as? String ?? "")
+            duration = parseDurationString(value)
+        }
+        // Без длительности это не песня (эфир, плейлист и т.п.)
+        guard duration > 0 else { return nil }
+
+        let typeLabels: Set<String> = ["песня", "song", "видео", "video", "клип", "эпизод", "episode"]
+        if let first = parts.first, typeLabels.contains(first.lowercased()) {
+            parts.removeFirst()
+        }
+        let artist = parts.first ?? "YouTube Music"
+
+        return YouTubeTrack(
+            id: videoId,
+            title: title,
+            uploader: artist,
+            duration: duration,
+            thumbnailUrl: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg"
+        )
+    }
+
+    private static func musicItemVideoId(_ item: [String: Any]) -> String? {
+        if let data = item["playlistItemData"] as? [String: Any],
+           let id = data["videoId"] as? String, !id.isEmpty {
+            return id
+        }
+        return findWatchVideoId(in: item)
+    }
+
+    private static func findWatchVideoId(in node: Any) -> String? {
+        if let dict = node as? [String: Any] {
+            if let watch = dict["watchEndpoint"] as? [String: Any],
+               let id = watch["videoId"] as? String, !id.isEmpty {
+                return id
+            }
+            for key in dict.keys.sorted() {
+                if let value = dict[key], value is [String: Any] || value is [Any],
+                   let id = findWatchVideoId(in: value) {
+                    return id
+                }
+            }
+        } else if let array = node as? [Any] {
+            for value in array {
+                if let id = findWatchVideoId(in: value) {
+                    return id
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func encodeQueryValue(_ value: String) -> String {
+        // Токен уже может быть закодирован (%3D) — тогда не трогаем его
+        if value.contains("%") { return value }
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    // MARK: - Метаданные и другая загрузка той же песни
+
+    /// Запоминает название и длительность трека — пригодится, если сам ролик окажется недоступен
+    func rememberTrack(_ track: YouTubeTrack) {
+        rememberTracks([track])
+    }
+
+    private func rememberTracks(_ tracks: [YouTubeTrack]) {
+        guard !tracks.isEmpty else { return }
+        cacheLock.withLock {
+            if knownTracks.count > 3000 {
+                knownTracks.removeAll()
+            }
+            for track in tracks {
+                // Не затираем полные данные пустыми (например, без длительности)
+                if let existing = knownTracks[track.id], track.duration == 0, existing.duration > 0 {
+                    continue
+                }
+                knownTracks[track.id] = track
+            }
+        }
+    }
+
+    /// YouTubeKit и прямой запрос плеера InnerTube: YouTubeKit получает фору в 3 секунды,
+    /// затем параллельно стартует запрос плеера. Берём первую рабочую ссылку.
+    private func resolveStreamURL(for videoId: String) async -> URL? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<URL?, Never>) in
+            let gate = ResumeGate(continuation)
+            let attempts = AttemptCounter(2)
+
+            Task {
+                let url = await self.extractAudioURL(for: videoId, timeout: 20)
+                if let url = url, gate.resume(with: url) {
+                    print("YouTubeService: ✅ Аудио URL через YouTubeKit: \(videoId)")
+                }
+                if attempts.finishOne() {
+                    gate.resume(with: nil)
+                }
+            }
+
+            Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if !gate.isResolved {
+                    let url = await self.fetchAudioURLViaInnerTubePlayer(videoId: videoId)
+                    if let url = url {
+                        gate.resume(with: url)
+                    }
+                }
+                if attempts.finishOne() {
+                    gate.resume(with: nil)
+                }
+            }
+        }
+    }
+
+    /// Ищет ту же песню в каталоге YouTube Music (совпадение по длительности) и берёт её поток
+    private func alternateUploadURL(for videoId: String) async -> URL? {
+        guard let original = cacheLock.withLock({ knownTracks[videoId] }) else { return nil }
+
+        let query = Self.songSearchQuery(title: original.title, artist: original.uploader)
+        guard !query.isEmpty, let result = await searchMusicSongs(query: query) else { return nil }
+
+        let tolerance = max(8, original.duration / 20)
+        let candidates = result.tracks
+            .filter { $0.id != videoId }
+            .filter { original.duration <= 0 || abs($0.duration - original.duration) <= tolerance }
+            .prefix(2)
+
+        for candidate in candidates {
+            if let url = await resolveStreamURL(for: candidate.id) {
+                print("YouTubeService: ✅ Другая загрузка той же песни: \(candidate.id) вместо \(videoId)")
+                return url
+            }
+        }
+        print("YouTubeService: другая загрузка для \(videoId) не найдена (кандидатов: \(candidates.count))")
+        return nil
+    }
+
+    /// «Rammstein - Sonne (Official Video)» + «Rammstein Official» → «Rammstein - Sonne»
+    static func songSearchQuery(title: String, artist: String) -> String {
+        var cleanTitle = title.replacingOccurrences(
+            of: "\\s*[\\(\\[【][^\\)\\]】]*[\\)\\]】]",
+            with: "",
+            options: .regularExpression
+        )
+        cleanTitle = cleanTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var cleanArtist = artist
+        for suffix in [" - Topic", "VEVO", " Official", " official"] where cleanArtist.hasSuffix(suffix) {
+            cleanArtist = String(cleanArtist.dropLast(suffix.count))
+        }
+        cleanArtist = cleanArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanArtist.isEmpty || cleanTitle.lowercased().contains(cleanArtist.lowercased()) {
+            return cleanTitle
+        }
+        return "\(cleanArtist) \(cleanTitle)"
+    }
+
+    /// Счётчик завершившихся попыток (потокобезопасный)
+    private final class AttemptCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var remaining: Int
+
+        init(_ count: Int) {
+            remaining = count
+        }
+
+        /// - Returns: `true`, когда завершилась последняя попытка
+        func finishOne() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            remaining -= 1
+            return remaining == 0
+        }
     }
 }

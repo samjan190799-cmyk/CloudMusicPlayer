@@ -364,7 +364,59 @@ struct ExploreView: View {
                 }
             }
 
+            songResults
+
             youTubeResults
+        }
+    }
+
+    /// Песни из каталога YouTube Music: чистые названия, исполнители и длительность
+    private var songResults: some View {
+        let songs = service.songs
+        let queue = songs.map { youTubePlayerTrack($0) }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                SectionHeader(title: "Песни", subtitle: "YouTube Music")
+                if service.isSongsLoading {
+                    ProgressView()
+                        .padding(.trailing, Metrics.screenPadding)
+                }
+            }
+
+            if songs.isEmpty {
+                if !service.isSongsLoading {
+                    Text("Песен не найдено — посмотрите видео ниже")
+                        .font(.appSubheadline)
+                        .foregroundColor(Palette.textSecondary)
+                        .padding(.horizontal, Metrics.screenPadding)
+                }
+            } else {
+                LazyVStack(spacing: 2) {
+                    ForEach(Array(songs.enumerated()), id: \.element.id) { index, track in
+                        onlineRow(track, playerTrack: queue[index], showsDuration: true) {
+                            play(queue[index], in: queue)
+                        }
+                    }
+                }
+                .padding(.horizontal, Metrics.screenPadding)
+
+                if service.canLoadMoreSongs {
+                    Button {
+                        service.loadMoreSongs()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if service.isSongsLoading {
+                                ProgressView()
+                            }
+                            Text("Ещё песни")
+                        }
+                    }
+                    .buttonStyle(SecondaryCapsuleButtonStyle())
+                    .padding(.horizontal, Metrics.screenPadding)
+                    .disabled(service.isSongsLoading)
+                }
+            }
         }
     }
 
@@ -374,7 +426,7 @@ struct ExploreView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionHeader(title: "YouTube")
+                SectionHeader(title: "Видео", subtitle: "YouTube")
                 if service.isLoading {
                     ProgressView()
                         .padding(.trailing, Metrics.screenPadding)

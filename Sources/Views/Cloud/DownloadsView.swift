@@ -150,7 +150,7 @@ struct DownloadsView: View {
                     .font(.appRowTitle)
                     .foregroundColor(Palette.textPrimary)
                     .lineLimit(1)
-                Text(item.source.displayName)
+                Text(item.progress > 0 ? item.source.displayName : "Получаем ссылку…")
                     .font(.appSubheadline)
                     .foregroundColor(Palette.textSecondary)
             }
