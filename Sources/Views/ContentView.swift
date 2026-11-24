@@ -18,6 +18,8 @@ struct ContentView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     bottomBar
                 }
+                // Таб-бар и мини-плеер остаются внизу под клавиатурой, а не всплывают над ней
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
             if router.isPlayerExpanded && status.hasTrack {
                 NowPlayingView()
