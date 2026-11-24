@@ -355,7 +355,8 @@ class DownloadManager: NSObject, ObservableObject {
 
                 guard let audioUrl = audioUrl else {
                     print("DownloadManager: ❌ YouTube не отдал ссылку для \(trackId)")
-                    self.markFailed(trackId: trackId, title: track.title, reason: "YouTube не отдал этот трек")
+                    let explanation = YouTubeService.shared.userFacingFailureMessage(for: trackId)
+                    self.markFailed(trackId: trackId, title: track.title, reason: explanation.lowercasedFirstLetter)
                     return
                 }
 
@@ -743,6 +744,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
 
 // Вспомогательное расширение для получения безопасного имени файла
 extension String {
+    /// «YouTube не ответил» остаётся как есть, «Сервер…» → «сервер…» (для вставки в середину фразы)
+    var lowercasedFirstLetter: String {
+        guard let first = first, first.isUppercase, !hasPrefix("YouTube") else { return self }
+        return first.lowercased() + dropFirst()
+    }
+
     var uuidCompatible: String {
         return self.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
     }

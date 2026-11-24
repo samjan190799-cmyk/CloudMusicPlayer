@@ -96,6 +96,16 @@ class YouTubeService: ObservableObject {
         cacheLock.withLock { extractionFailureReasons[videoId] }
     }
 
+    /// Понятное пользователю объяснение, почему трек не удалось получить
+    func userFacingFailureMessage(for videoId: String) -> String {
+        let reason = lastExtractionFailureReason(for: videoId) ?? ""
+        let restricted = ["LOGIN_REQUIRED", "not a bot", "1 МБ", "AGE", "UNPLAYABLE", "ERROR"]
+        if restricted.contains(where: { reason.localizedCaseInsensitiveContains($0) }) {
+            return "YouTube ограничил доступ к этому видео. Найдите песню в разделе «Песни» — там другая версия"
+        }
+        return "YouTube не ответил. Проверьте интернет и попробуйте ещё раз"
+    }
+
     private init() {
         // Автоматически загружаем Чарты при старте приложения
         fetchTrendingMusic(region: .russia)

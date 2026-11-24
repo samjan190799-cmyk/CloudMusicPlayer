@@ -574,7 +574,8 @@ class AudioPlayerManager: NSObject, ObservableObject {
                         guard self.currentTrack?.id == track.id else { return }
                         self.playbackState = .stopped
                         self.isBuffering = false
-                        self.showPlaybackError("Не удалось загрузить «\(track.title)» с YouTube. Проверьте интернет и попробуйте ещё раз.")
+                        let explanation = YouTubeService.shared.userFacingFailureMessage(for: track.id)
+                        self.showPlaybackError("«\(track.title)» не воспроизводится. \(explanation).")
                         self.endBackgroundTask()
                     }
                 }
