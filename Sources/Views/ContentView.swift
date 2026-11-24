@@ -15,12 +15,14 @@ struct ContentView: View {
             Palette.background
                 .ignoresSafeArea()
 
-            tabContent
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    bottomBar
-                }
-                // Таб-бар и мини-плеер остаются внизу под клавиатурой, а не всплывают над ней
-                .ignoresSafeArea(.keyboard, edges: .bottom)
+            // Нижняя панель — часть раскладки: контент заканчивается над мини-плеером
+            // и ничего не просвечивает сквозь него
+            VStack(spacing: 0) {
+                tabContent
+                bottomBar
+            }
+            // Таб-бар и мини-плеер остаются внизу под клавиатурой, а не всплывают над ней
+            .ignoresSafeArea(.keyboard, edges: .bottom)
 
             if router.isPlayerExpanded && status.hasTrack {
                 NowPlayingView()
@@ -73,6 +75,8 @@ struct ContentView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     @ViewBuilder
@@ -98,23 +102,22 @@ struct ContentView: View {
             if status.hasTrack {
                 MiniPlayerView()
                     .padding(.horizontal, 10)
+                    .padding(.top, 8)
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             AppTabBar()
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: status.hasTrack)
+        // Сплошной фон без прозрачности и тонкая линия сверху — граница с контентом
         .background(
-            LinearGradient(
-                stops: [
-                    .init(color: Palette.background.opacity(0.0), location: 0.0),
-                    .init(color: Palette.background.opacity(0.88), location: 0.3),
-                    .init(color: Palette.background, location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
+            Palette.background
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Palette.stroke)
+                        .frame(height: 0.5)
+                }
+                .ignoresSafeArea(edges: .bottom)
         )
     }
 }

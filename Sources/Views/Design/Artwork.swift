@@ -255,16 +255,21 @@ struct ArtworkView: View {
     @State private var loadedID: String? = nil
 
     var body: some View {
-        ZStack {
-            if let image = image, loadedID == artwork.cacheID {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .transition(.opacity)
-            } else {
-                GeneratedCover(seed: artwork.id, title: artwork.title, symbol: symbol)
-            }
-        }
+        // Color.clear задаёт размер квадрата, а картинка лежит поверх и обрезается по нему:
+        // иначе scaledToFill() раздувает размер вью, и широкие превью вылезают за рамку
+        Color.clear
+            .overlay(
+                Group {
+                    if let image = image, loadedID == artwork.cacheID {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .transition(.opacity)
+                    } else {
+                        GeneratedCover(seed: artwork.id, title: artwork.title, symbol: symbol)
+                    }
+                }
+            )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -450,15 +455,19 @@ struct NowPlayingArtworkView: View {
     @ObservedObject private var artwork = NowPlayingArtwork.shared
 
     var body: some View {
-        ZStack {
-            if let image = artwork.image, artwork.trackID == track.id {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                GeneratedCover(seed: track.artworkKey.id, title: track.title)
-            }
-        }
+        // См. ArtworkView: размер задаёт Color.clear, картинка обрезается по нему
+        Color.clear
+            .overlay(
+                Group {
+                    if let image = artwork.image, artwork.trackID == track.id {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        GeneratedCover(seed: track.artworkKey.id, title: track.title)
+                    }
+                }
+            )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
