@@ -252,13 +252,42 @@ class YouTubeService: ObservableObject {
 
     private func fetchAudioURLViaInnerTubePlayer(videoId: String) async -> URL? {
         for client in Self.fallbackPlayerClients {
-            if let url = await requestPlayer(videoId: videoId, client: client) {
-                print("YouTubeService: ✅ Аудио URL через InnerTube \(client.name): \(videoId)")
-                cacheLock.withLock { _ = downloadBeforePlaybackURLs.insert(url) }
-                return url
+            guard let url = await requestPlayer(videoId: videoId, client: client) else { continue }
+
+            // Часто googlevideo отдаёт по такой ссылке только первый ~1 МБ, дальше — 403.
+            // Такая ссылка бесполезна: трек оборвётся. Проверяем заранее и не используем её.
+            guard await Self.isServedBeyondFirstChunk(url) else {
+                print("YouTubeService: InnerTube \(client.name) — googlevideo отдаёт только начало файла для \(videoId)")
+                cacheLock.withLock {
+                    extractionFailureReasons[videoId] = "googlevideo отдаёт только первый 1 МБ ссылки \(client.name)"
+                }
+                continue
             }
+
+            print("YouTubeService: ✅ Аудио URL через InnerTube \(client.name): \(videoId)")
+            cacheLock.withLock { _ = downloadBeforePlaybackURLs.insert(url) }
+            return url
         }
         return nil
+    }
+
+    /// Проверяет, что сервер отдаёт данные дальше первого мегабайта
+    private static func isServedBeyondFirstChunk(_ url: URL) async -> Bool {
+        let probeOffset: Int64 = 1_572_864 // 1.5 МБ
+        // Короткий файл целиком помещается в первый кусок — проверять нечего
+        if let length = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "clen" })?.value.flatMap({ Int64($0) }),
+           length <= probeOffset {
+            return true
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.setValue("bytes=\(probeOffset)-\(probeOffset + 1)", forHTTPHeaderField: "Range")
+        guard let result = try? await URLSession.shared.data(for: request),
+              let http = result.1 as? HTTPURLResponse else {
+            return false
+        }
+        return http.statusCode == 206 || http.statusCode == 200
     }
 
     /// Ссылку нельзя отдать AVPlayer как поток — сначала скачать файл целиком (см. смоук-тест)
