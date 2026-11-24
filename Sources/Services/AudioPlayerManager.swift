@@ -825,24 +825,25 @@ class AudioPlayerManager: NSObject, ObservableObject {
         // Уже скачивали в этой сессии
         let baseName = trackId.uuidCompatible
         if let existing = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?
-            .first(where: { $0.deletingPathExtension().lastPathComponent == baseName }) {
+            .first(where: { $0.deletingPathExtension().lastPathComponent == baseName && $0.pathExtension != "part" }) {
             return existing
         }
 
+        // googlevideo отдаёт такие ссылки только кусками — запрос файла целиком получает 403
+        let partial = folder.appendingPathComponent("\(baseName).part")
+        guard await RangedDownloader.download(from: url, to: partial) else {
+            print("AudioPlayer: ❌ Не удалось скачать поток \(trackId)")
+            try? fileManager.removeItem(at: partial)
+            return nil
+        }
+        let ext = AudioFileSniffer.fileExtension(for: partial, fallback: "m4a")
+        let destination = folder.appendingPathComponent("\(baseName).\(ext)")
+        try? fileManager.removeItem(at: destination)
         do {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 60
-            let (tempURL, response) = try await URLSession.shared.download(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                return nil
-            }
-            let ext = AudioFileSniffer.fileExtension(for: tempURL, fallback: "m4a")
-            let destination = folder.appendingPathComponent("\(baseName).\(ext)")
-            try? fileManager.removeItem(at: destination)
-            try fileManager.moveItem(at: tempURL, to: destination)
+            try fileManager.moveItem(at: partial, to: destination)
             return destination
         } catch {
-            print("AudioPlayer: ❌ Не удалось скачать поток: \(error.localizedDescription)")
+            print("AudioPlayer: ❌ Не удалось сохранить поток: \(error.localizedDescription)")
             return nil
         }
     }

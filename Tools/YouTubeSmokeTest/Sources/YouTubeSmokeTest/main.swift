@@ -53,24 +53,26 @@ func audioURL(for videoId: String) async -> URL? {
 
 let service = YouTubeService.shared
 
-/// Как плеер приложения поступает со ссылками резервного клиента: скачивает файл целиком и открывает локально
+/// Как приложение поступает со ссылками резервного клиента: скачивает файл кусками (Range)
+/// и открывает локально — целиком googlevideo такие ссылки не отдаёт (403)
 func downloadAndOpenLocally(_ url: URL, name: String) async -> (ok: Bool, detail: String) {
+    let partial = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).part")
+    let started = Date()
+    guard await RangedDownloader.download(from: url, to: partial) else {
+        return (false, "загрузка кусками не удалась")
+    }
+    let elapsed = String(format: "%.1f", Date().timeIntervalSince(started))
     do {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 90
-        let (tempURL, response) = try await URLSession.shared.download(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-        guard (200...299).contains(status) else { return (false, "HTTP \(status)") }
-        let ext = AudioFileSniffer.fileExtension(for: tempURL, fallback: "m4a")
+        let ext = AudioFileSniffer.fileExtension(for: partial, fallback: "m4a")
         let local = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).\(ext)")
         try? FileManager.default.removeItem(at: local)
-        try FileManager.default.moveItem(at: tempURL, to: local)
+        try FileManager.default.moveItem(at: partial, to: local)
         defer { try? FileManager.default.removeItem(at: local) }
         let size = (try? FileManager.default.attributesOfItem(atPath: local.path)[.size] as? Int) ?? 0
         let asset = AVURLAsset(url: local)
         let (isPlayable, duration) = try await asset.load(.isPlayable, .duration)
         let seconds = CMTimeGetSeconds(duration)
-        return (isPlayable && seconds > 0, ".\(ext), \(size / 1024) КБ, \(Int(seconds)) с, playable=\(isPlayable)")
+        return (isPlayable && seconds > 0, ".\(ext), \(size / 1024) КБ за \(elapsed) с, длительность \(Int(seconds)) с, playable=\(isPlayable)")
     } catch {
         return (false, error.localizedDescription)
     }
@@ -263,7 +265,7 @@ section("Резервный клиент")
 if let fallbackURL = await service.fallbackAudioURL(for: "dQw4w9WgXcQ") {
     check(service.requiresDownloadBeforePlayback(fallbackURL), "Ссылка резервного клиента помечена «сначала скачать»")
     let result = await downloadAndOpenLocally(fallbackURL, name: "fallback-dQw4w9WgXcQ")
-    check(result.ok, "Скачанный файл резервного клиента играет в AVFoundation", result.detail)
+    check(result.ok, "Ссылка резервного клиента скачивается кусками и играет в AVFoundation", result.detail)
     print("   \(result.detail)")
 } else {
     let reason = service.lastExtractionFailureReason(for: "dQw4w9WgXcQ") ?? "нет ссылки"

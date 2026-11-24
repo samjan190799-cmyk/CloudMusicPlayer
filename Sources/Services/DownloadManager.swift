@@ -80,6 +80,7 @@ class DownloadManager: NSObject, ObservableObject {
     private var cancelledPreparing: Set<String> = []          // отменены до начала скачивания
     private var youTubeDownloadMeta: [String: YouTubeTrack] = [:]
     private var youTubeRetried: Set<String> = []              // уже был автоповтор после ошибки сервера
+    private var rangedTasks: [String: Task<Void, Never>] = [:] // загрузки кусками (ссылки резервного клиента)
     
     private let libraryFileName = "Library.json"
     private let offlineFolder = "OfflineMusic"
@@ -122,7 +123,10 @@ class DownloadManager: NSObject, ObservableObject {
             task.cancel()
         }
         DispatchQueue.main.async {
-            if self.preparingTitles.removeValue(forKey: trackId) != nil {
+            if let ranged = self.rangedTasks.removeValue(forKey: trackId) {
+                ranged.cancel()
+                self.preparingTitles.removeValue(forKey: trackId)
+            } else if self.preparingTitles.removeValue(forKey: trackId) != nil {
                 self.cancelledPreparing.insert(trackId)
             }
             self.activeDownloads.removeValue(forKey: trackId)
@@ -356,7 +360,15 @@ class DownloadManager: NSObject, ObservableObject {
                 }
 
                 // Повторное нажатие во время извлечения ссылки не должно запускать вторую загрузку
-                guard self.downloadTasks[trackId] == nil, !self.isDownloaded(trackId: trackId) else { return }
+                guard self.downloadTasks[trackId] == nil,
+                      self.rangedTasks[trackId] == nil,
+                      !self.isDownloaded(trackId: trackId) else { return }
+
+                // Ссылки резервного клиента googlevideo отдаёт только кусками (целиком — 403)
+                if YouTubeService.shared.requiresDownloadBeforePlayback(audioUrl) {
+                    self.startRangedDownload(track: track, url: audioUrl)
+                    return
+                }
 
                 // Ссылка googlevideo уже подписана под клиент YouTubeKit — чужой User-Agent может дать 403
                 let request = URLRequest(url: audioUrl)
@@ -374,6 +386,50 @@ class DownloadManager: NSObject, ObservableObject {
         }
     }
     
+    /// Скачивание Range-запросами по 1 МБ (вызывается на главном потоке)
+    private func startRangedDownload(track: YouTubeTrack, url: URL) {
+        let trackId = track.id
+        preparingTitles[trackId] = track.title // название для списка загрузок
+        activeDownloads[trackId] = 0.01
+
+        let partial = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(trackId.uuidCompatible).part")
+
+        rangedTasks[trackId] = Task { [weak self] in
+            let success = await RangedDownloader.download(from: url, to: partial) { progress in
+                DispatchQueue.main.async {
+                    guard let self = self, self.rangedTasks[trackId] != nil else { return }
+                    self.activeDownloads[trackId] = max(progress, 0.01)
+                }
+            }
+            await MainActor.run {
+                guard let self = self else { return }
+                // Записи нет — загрузку отменил пользователь
+                guard self.rangedTasks.removeValue(forKey: trackId) != nil else {
+                    try? FileManager.default.removeItem(at: partial)
+                    return
+                }
+                self.preparingTitles.removeValue(forKey: trackId)
+                guard success else {
+                    try? FileManager.default.removeItem(at: partial)
+                    YouTubeService.shared.invalidateStreamCache(for: trackId)
+                    self.markFailed(trackId: trackId, title: track.title, reason: "YouTube прервал загрузку")
+                    return
+                }
+                self.saveDownloadedFile(
+                    at: partial,
+                    trackId: trackId,
+                    title: track.title,
+                    source: .youtube,
+                    size: 0,
+                    artist: track.uploader,
+                    duration: Double(track.duration),
+                    thumbnailUrl: track.thumbnailUrl
+                )
+            }
+        }
+    }
+
     /// Внутренний метод запуска задачи скачивания
     private func startDownload(
         trackId: String,
@@ -470,6 +526,30 @@ extension DownloadManager: URLSessionDownloadDelegate {
             return
         }
         
+        saveDownloadedFile(
+            at: location,
+            trackId: trackId,
+            title: title,
+            source: source,
+            size: size,
+            artist: artist,
+            duration: duration,
+            thumbnailUrl: thumbnailUrl
+        )
+    }
+
+    /// Переносит скачанный файл в медиатеку, подбирает обложку и метаданные.
+    /// Вызывается синхронно: `location` удаляется системой после возврата из делегата.
+    private func saveDownloadedFile(
+        at location: URL,
+        trackId: String,
+        title: String,
+        source: TrackSource,
+        size: Int64,
+        artist: String?,
+        duration: Double?,
+        thumbnailUrl: String?
+    ) {
         // Генерируем уникальное локальное имя файла; расширение — по реальному содержимому (YouTube отдаёт M4A)
         let fileExtension = AudioFileSniffer.fileExtension(for: location)
         let safeFileName = "\(trackId.uuidCompatible).\(fileExtension)"
@@ -589,7 +669,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
         }
     }
-    
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
              print("Ошибка загрузки: \(error.localizedDescription)")
