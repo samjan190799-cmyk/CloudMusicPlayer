@@ -66,7 +66,7 @@ class AudioPlayerManager: NSObject, ObservableObject {
     
     // Очередь треков
     @Published var playlist: [PlayerTrack] = []
-    private var shuffledPlaylist: [PlayerTrack] = []
+    @Published private var shuffledPlaylist: [PlayerTrack] = []
     private var currentTrackIndex: Int = -1
     
     // Ретрай при ошибках воспроизведения (макс 2 попытки)
@@ -316,6 +316,111 @@ class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     
+    // MARK: - Управление очередью
+
+    /// Текущая очередь в порядке воспроизведения (с учётом перемешивания)
+    var activeQueue: [PlayerTrack] {
+        getPlaylist()
+    }
+
+    /// Треки, которые прозвучат после текущего
+    var upNext: [PlayerTrack] {
+        let queue = getPlaylist()
+        let start = currentTrackIndex + 1
+        guard start >= 0, start < queue.count else { return [] }
+        return Array(queue[start...])
+    }
+
+    /// Воспроизвести набор треков по порядку, начиная с указанного
+    func playInOrder(_ tracks: [PlayerTrack], startingAt index: Int = 0) {
+        guard tracks.indices.contains(index) else { return }
+        isShuffleEnabled = false
+        play(track: tracks[index], in: tracks)
+    }
+
+    /// Перемешать и воспроизвести набор треков
+    func playShuffled(_ tracks: [PlayerTrack]) {
+        guard let first = tracks.randomElement() else { return }
+        isShuffleEnabled = true
+        play(track: first, in: tracks)
+    }
+
+    /// Поставить трек сразу после текущего
+    func playNext(_ track: PlayerTrack) {
+        guard let current = currentTrack else {
+            play(track: track, in: [track])
+            return
+        }
+        guard track.id != current.id else { return }
+        removeFromQueues(trackId: track.id)
+        syncCurrentIndex()
+        let insertIndex = max(currentTrackIndex + 1, 0)
+        if isShuffleEnabled {
+            shuffledPlaylist.insert(track, at: min(insertIndex, shuffledPlaylist.count))
+            playlist.append(track)
+        } else {
+            playlist.insert(track, at: min(insertIndex, playlist.count))
+        }
+        syncCurrentIndex()
+    }
+
+    /// Добавить трек в конец очереди
+    func addToQueue(_ track: PlayerTrack) {
+        guard let current = currentTrack else {
+            play(track: track, in: [track])
+            return
+        }
+        guard track.id != current.id else { return }
+        removeFromQueues(trackId: track.id)
+        playlist.append(track)
+        if isShuffleEnabled {
+            shuffledPlaylist.append(track)
+        }
+        syncCurrentIndex()
+    }
+
+    /// Убрать трек из очереди (текущий трек убрать нельзя)
+    func removeFromQueue(trackId: String) {
+        guard trackId != currentTrack?.id else { return }
+        removeFromQueues(trackId: trackId)
+        syncCurrentIndex()
+    }
+
+    /// Перейти к треку из очереди
+    func jumpToQueueTrack(id: String) {
+        let queue = getPlaylist()
+        guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
+        currentTrackIndex = index
+        currentTrack = queue[index]
+        loadAndPlay(track: queue[index])
+    }
+
+    /// Заменить список «Далее» новым порядком (после перетаскивания в очереди)
+    func replaceUpNext(with tracks: [PlayerTrack]) {
+        var queue = getPlaylist()
+        let start = max(currentTrackIndex + 1, 0)
+        guard start <= queue.count else { return }
+        queue.replaceSubrange(start..<queue.count, with: tracks)
+        if isShuffleEnabled {
+            shuffledPlaylist = queue
+        } else {
+            playlist = queue
+        }
+    }
+
+    private func removeFromQueues(trackId: String) {
+        playlist.removeAll { $0.id == trackId }
+        shuffledPlaylist.removeAll { $0.id == trackId }
+    }
+
+    private func syncCurrentIndex() {
+        guard let current = currentTrack else {
+            currentTrackIndex = -1
+            return
+        }
+        currentTrackIndex = getPlaylist().firstIndex(where: { $0.id == current.id }) ?? -1
+    }
+
     // MARK: - Вспомогательные методы
     
     private func getPlaylist() -> [PlayerTrack] {
@@ -364,8 +469,9 @@ class AudioPlayerManager: NSObject, ObservableObject {
         
         var playerItem: AVPlayerItem? = nil
         
-        // 1. Офлайн файл из Медиатеки
-        if let localURL = track.localURL, FileManager.default.fileExists(atPath: localURL.path) {
+        // 1. Офлайн файл из Медиатеки (или трек из приложения «Музыка» по ipod-library://)
+        if let localURL = track.localURL,
+           localURL.scheme == "ipod-library" || FileManager.default.fileExists(atPath: localURL.path) {
             playerItem = AVPlayerItem(url: localURL)
         }
         // 2. Локальный файл из Кэша (CacheManager)
@@ -393,7 +499,9 @@ class AudioPlayerManager: NSObject, ObservableObject {
         }
         // 5. Запрос ссылки на ходу для Яндекса
         else if track.sourceName.contains("Яндекс") || track.sourceName == "Yandex" {
-            YandexDiskService.shared.getDownloadUrl(forPath: track.id) { [weak self] downloadUrl in
+            // ID трека Яндекса — это resource_id, а API скачивания ожидает путь к файлу
+            let yandexPath = YandexDiskService.shared.tracks.first(where: { $0.id == track.id })?.path ?? track.id
+            YandexDiskService.shared.getDownloadUrl(forPath: yandexPath) { [weak self] downloadUrl in
                 guard let self = self else { return }
                 guard self.currentTrack?.id == track.id else { return }
                 guard let downloadUrl = downloadUrl else {

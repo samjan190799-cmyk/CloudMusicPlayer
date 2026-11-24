@@ -8,11 +8,15 @@ struct CloudMusicPlayerApp: App {
         setupBackgroundAudio()
         URLProtocol.registerClass(YouTubeURLProtocol.self)
         _ = YouTubeSessionManager.shared
+        // История и цвет обложки следят за текущим треком с самого старта
+        _ = ListeningHistory.shared
+        _ = NowPlayingArtwork.shared
     }
     
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .themed()
                 .onOpenURL { url in
                     TelegramShareManager.shared.handleIncomingAudioURL(url)
                 }

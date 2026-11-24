@@ -1,129 +1,149 @@
 import SwiftUI
 
-/// Основной контейнер с вкладками в стиле Liquid Glass 2026 (Точно по референсному дизайну)
+/// Корневой экран: вкладки, плавающий мини-плеер, полноэкранный плеер и общие листы
 struct ContentView: View {
-    @State private var selectedTab = 1 // 0: Explore, 1: Recent, 2: Search, 3: History, 4: Profile
-    @State private var isPlayerExpanded = false
-    @ObservedObject var playerManager = AudioPlayerManager.shared
-    
-    init() {
-        let appearance = UITabBarAppearance()
-        appearance.configureWithTransparentBackground()
-        UITabBar.appearance().standardAppearance = appearance
-        if #available(iOS 15.0, *) {
-            UITabBar.appearance().scrollEdgeAppearance = appearance
-        }
-    }
-    
+    @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var status = PlaybackStatus.shared
+
+    /// Вкладки создаются при первом открытии и дальше живут в фоне —
+    /// так сохраняются прокрутка и навигация при переключении
+    @State private var visitedTabs: Set<AppTab> = [.home]
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Динамический глубокий обсидиановый фон
-            AmbientBackgroundView()
-            
-            // Контент активной вкладки
-            Group {
-                switch selectedTab {
-                case 0:
-                    LibraryView()
-                case 1:
-                    DownloadsView()
-                case 2:
-                    CloudHubView(selectedTab: $selectedTab)
-                case 3:
-                    YouTubeView()
-                case 4:
-                    SettingsView()
-                default:
-                    LibraryView()
+        ZStack {
+            Palette.background
+                .ignoresSafeArea()
+
+            tabContent
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    bottomBar
                 }
+
+            if router.isPlayerExpanded && status.hasTrack {
+                NowPlayingView()
+                    .transition(.move(edge: .bottom))
+                    .zIndex(2)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.bottom, 90)
-            .ignoresSafeArea(edges: .top)
-            
-            // Полноценный стеклянный Мини-плеер + плавающий стеклянный TabBar внизу
-            VStack(spacing: 8) {
-                if playerManager.currentTrack != nil {
-                    MiniPlayerView(isPlayerExpanded: $isPlayerExpanded)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+
+            if let toast = router.toast {
+                VStack {
+                    ToastView(toast: toast)
+                        .padding(.top, 8)
+                    Spacer()
                 }
-                
-                // Кастомный парящий стеклянный TabBar (Liquid Glass)
-                customTabBar
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(3)
+                .allowsHitTesting(false)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
-        .fullScreenCover(isPresented: $isPlayerExpanded) {
-            PlayerDetailView(isPlayerExpanded: $isPlayerExpanded)
+        .sheet(item: $router.addToPlaylistTrack) { track in
+            AddToPlaylistView(track: track)
+                .themed()
         }
-        .preferredColorScheme(.dark)
+        .sheet(isPresented: $router.isSettingsPresented) {
+            SettingsView()
+                .themed()
+        }
+        .onChange(of: router.selectedTab) { tab in
+            visitedTabs.insert(tab)
+        }
+        .onChange(of: status.hasTrack) { hasTrack in
+            if !hasTrack {
+                router.isPlayerExpanded = false
+            }
+        }
     }
-    
-    // MARK: - Кастомный стеклянный TabBar (Liquid Glass)
-    
-    private var customTabBar: some View {
-        HStack(spacing: 4) {
-            tabButton(title: "Медиатека", icon: "music.note.house.fill", index: 0)
-            tabButton(title: "Загрузки", icon: "arrow.down.circle.fill", index: 1)
-            tabButton(title: "Облако", icon: "cloud.fill", index: 2)
-            tabButton(title: "YouTube", icon: "play.rectangle.fill", index: 3)
-            tabButton(title: "Настройки", icon: "gearshape.fill", index: 4)
+
+    // MARK: - Вкладки
+
+    private var tabContent: some View {
+        ZStack {
+            ForEach(AppTab.allCases) { tab in
+                if visitedTabs.contains(tab) || router.selectedTab == tab {
+                    tabView(for: tab)
+                        .opacity(router.selectedTab == tab ? 1 : 0)
+                        .allowsHitTesting(router.selectedTab == tab)
+                        .accessibilityHidden(router.selectedTab != tab)
+                }
+            }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
+    }
+
+    @ViewBuilder
+    private func tabView(for tab: AppTab) -> some View {
+        switch tab {
+        case .home:
+            HomeView()
+        case .search:
+            ExploreView()
+        case .library:
+            LibraryView()
+        case .cloud:
+            CloudHubView()
+        }
+    }
+
+    // MARK: - Нижняя панель (мини-плеер + таб-бар)
+
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            if status.hasTrack {
+                MiniPlayerView()
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            AppTabBar()
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: status.hasTrack)
         .background(
-            ZStack {
-                VisualEffectBlur(material: .systemUltraThinMaterialDark)
-                Color.white.opacity(0.08)
-            }
+            LinearGradient(
+                stops: [
+                    .init(color: Palette.background.opacity(0.0), location: 0.0),
+                    .init(color: Palette.background.opacity(0.88), location: 0.3),
+                    .init(color: Palette.background, location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
         )
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.16), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.5), radius: 24, x: 0, y: 10)
     }
-    
-    private func tabButton(title: String, icon: String, index: Int) -> some View {
-        let isSelected = selectedTab == index
-        
-        return Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
-                selectedTab = index
-                HapticManager.shared.triggerSelection()
-            }
-        }) {
-            VStack(spacing: 4) {
-                ZStack {
-                    if isSelected {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.white, Color(white: 0.86)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 34, height: 34)
-                            .shadow(color: Color.white.opacity(0.35), radius: 8, x: 0, y: 1)
+}
+
+// MARK: - Таб-бар
+
+struct AppTabBar: View {
+    @ObservedObject private var router = AppRouter.shared
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(AppTab.allCases) { tab in
+                let isSelected = router.selectedTab == tab
+                Button {
+                    if !isSelected {
+                        router.select(tab)
                     }
-                    
-                    Image(systemName: icon)
-                        .font(.system(size: 15, weight: isSelected ? .bold : .medium))
-                        .foregroundColor(isSelected ? .black : Color.white.opacity(0.45))
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 19, weight: .semibold))
+                            .frame(height: 24)
+                        Text(tab.title)
+                            .font(.system(size: 10.5, weight: .semibold))
+                    }
+                    .foregroundColor(isSelected ? accent : Palette.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
+                    .contentShape(Rectangle())
                 }
-                .frame(height: 28)
-                
-                Text(title)
-                    .font(.system(size: 10, weight: isSelected ? .bold : .medium))
-                    .foregroundColor(isSelected ? .white : Color.white.opacity(0.45))
+                .buttonStyle(PressableButtonStyle(scale: 0.9))
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
         }
-        .buttonStyle(SpringScaleButtonStyle())
+        .padding(.horizontal, 6)
     }
 }

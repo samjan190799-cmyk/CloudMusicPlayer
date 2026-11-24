@@ -229,6 +229,18 @@ final class DeviceMediaScanner: ObservableObject {
             importFile(from: url)
         }
     }
+
+    /// Удаляет файл трека из Documents и убирает его из списков медиатеки.
+    /// Треки из приложения «Музыка» (ipod-library://) не удаляются.
+    func removeTrack(_ track: LocalTrack) {
+        guard !track.relativePath.hasPrefix("ipod-library://") else { return }
+        let fileURL = track.localURL
+        let path = fileURL.standardizedFileURL.path
+        try? FileManager.default.removeItem(at: fileURL)
+        importedTracks.removeAll { $0.id == track.id || $0.localURL.standardizedFileURL.path == path }
+        filesAppTracks.removeAll { $0.id == track.id || $0.localURL.standardizedFileURL.path == path }
+        saveImportedTracks()
+    }
     
     // MARK: - Хранение импортированных треков
     

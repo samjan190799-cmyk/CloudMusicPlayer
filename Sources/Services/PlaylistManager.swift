@@ -133,6 +133,14 @@ class PlaylistManager: ObservableObject {
         }
     }
     
+    /// Переименование плейлиста
+    func renamePlaylist(id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = playlists.firstIndex(where: { $0.id == id }) else { return }
+        playlists[index].name = trimmed
+        savePlaylists()
+    }
+
     /// Удаление плейлиста
     func deletePlaylist(id: UUID) {
         guard id != PlaylistManager.favoritesUUID else { return } // Нельзя удалить Избранное
