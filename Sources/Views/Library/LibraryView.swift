@@ -237,7 +237,7 @@ struct LibraryView: View {
                     LazyVStack(spacing: 2) {
                         ForEach(Array(visible.enumerated()), id: \.element.id) { index, track in
                             libraryRow(track: track, playerTrack: queue[index]) {
-                                AudioPlayerManager.shared.play(track: queue[index], in: queue)
+                                TrackActions.playOrToggle(queue[index], in: queue)
                             }
                         }
                     }
@@ -466,7 +466,7 @@ struct ArtistDetailView: View {
                 LazyVStack(spacing: 2) {
                     ForEach(Array(artist.tracks.enumerated()), id: \.element.id) { index, track in
                         Button {
-                            AudioPlayerManager.shared.play(track: queue[index], in: queue)
+                            TrackActions.playOrToggle(queue[index], in: queue)
                         } label: {
                             TrackRow(
                                 artwork: track.artworkKey,

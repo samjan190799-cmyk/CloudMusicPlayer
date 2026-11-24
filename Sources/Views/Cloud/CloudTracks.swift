@@ -64,6 +64,13 @@ enum CloudTracks {
 
     /// Telegram выдаёт прямую ссылку только по запросу, поэтому трек играет сразу после её получения
     static func playTelegram(_ track: TelegramAudioTrack) {
+        let player = AudioPlayerManager.shared
+        if player.currentTrack?.id == "tg_\(track.id)" && player.playbackState != .stopped {
+            if player.playbackState != .loading {
+                player.togglePlayPause()
+            }
+            return
+        }
         HapticManager.shared.triggerImpact(style: .medium)
         Task {
             guard let url = await TelegramService.shared.getDirectStreamURL(for: track.fileId) else {

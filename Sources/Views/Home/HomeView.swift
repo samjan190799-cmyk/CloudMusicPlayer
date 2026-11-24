@@ -190,10 +190,7 @@ struct HomeView: View {
                         ForEach(Array(recent.enumerated()), id: \.element.id) { index, track in
                             let display = track.display
                             Button {
-                                AudioPlayerManager.shared.play(
-                                    track: track.toPlayerTrack(),
-                                    in: recent.map { $0.toPlayerTrack() }
-                                )
+                                TrackActions.playOrToggle(track.toPlayerTrack(), in: recent.map { $0.toPlayerTrack() })
                             } label: {
                                 MediaCard(
                                     artwork: track.artworkKey,
@@ -261,7 +258,7 @@ struct HomeView: View {
                     ForEach(Array(top.enumerated()), id: \.element.id) { index, track in
                         let display = track.display
                         Button {
-                            AudioPlayerManager.shared.play(track: track.toPlayerTrack(), in: top.map { $0.toPlayerTrack() })
+                            TrackActions.playOrToggle(track.toPlayerTrack(), in: top.map { $0.toPlayerTrack() })
                         } label: {
                             TrackRow(
                                 artwork: track.artworkKey,
@@ -302,7 +299,7 @@ struct HomeView: View {
                         ForEach(Array(newest.enumerated()), id: \.element.id) { index, track in
                             let display = track.display
                             Button {
-                                AudioPlayerManager.shared.play(track: queue[index], in: queue)
+                                TrackActions.playOrToggle(queue[index], in: queue)
                             } label: {
                                 MediaCard(
                                     artwork: track.artworkKey,

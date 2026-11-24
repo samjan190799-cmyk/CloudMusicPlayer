@@ -6,7 +6,6 @@ struct CloudMusicPlayerApp: App {
     
     init() {
         setupBackgroundAudio()
-        URLProtocol.registerClass(YouTubeURLProtocol.self)
         _ = YouTubeSessionManager.shared
         // История и цвет обложки следят за текущим треком с самого старта
         _ = ListeningHistory.shared

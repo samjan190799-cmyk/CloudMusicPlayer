@@ -303,18 +303,36 @@ struct NowPlayingView: View {
 
     // MARK: Кнопки управления
 
+    /// Аудиокниги и длинные записи (> 20 мин): крайние кнопки перематывают −15/+30 с
+    private var isLongForm: Bool {
+        player.currentTrack?.sourceName == "Аудиокниги" || player.duration > 20 * 60
+    }
+
     private var transportControls: some View {
         HStack {
-            Button {
-                HapticManager.shared.triggerSelection()
-                player.toggleShuffle()
-            } label: {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundColor(player.isShuffleEnabled ? accent : Color.white.opacity(0.7))
-                    .frame(width: 44, height: 44)
+            if isLongForm {
+                Button {
+                    HapticManager.shared.triggerImpact(style: .light)
+                    player.skipBackward15()
+                } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.85))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Назад на 15 секунд")
+            } else {
+                Button {
+                    HapticManager.shared.triggerSelection()
+                    player.toggleShuffle()
+                } label: {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundColor(player.isShuffleEnabled ? accent : Color.white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(player.isShuffleEnabled ? "Перемешивание включено" : "Перемешивание выключено")
             }
-            .accessibilityLabel(player.isShuffleEnabled ? "Перемешивание включено" : "Перемешивание выключено")
 
             Spacer()
 
@@ -371,16 +389,29 @@ struct NowPlayingView: View {
 
             Spacer()
 
-            Button {
-                HapticManager.shared.triggerSelection()
-                player.toggleRepeatMode()
-            } label: {
-                Image(systemName: player.repeatMode == .one ? "repeat.1" : "repeat")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundColor(player.repeatMode == .none ? Color.white.opacity(0.7) : accent)
-                    .frame(width: 44, height: 44)
+            if isLongForm {
+                Button {
+                    HapticManager.shared.triggerImpact(style: .light)
+                    player.skipForward30()
+                } label: {
+                    Image(systemName: "goforward.30")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.85))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Вперёд на 30 секунд")
+            } else {
+                Button {
+                    HapticManager.shared.triggerSelection()
+                    player.toggleRepeatMode()
+                } label: {
+                    Image(systemName: player.repeatMode == .one ? "repeat.1" : "repeat")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundColor(player.repeatMode == .none ? Color.white.opacity(0.7) : accent)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(repeatLabel)
             }
-            .accessibilityLabel(repeatLabel)
         }
     }
 

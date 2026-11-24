@@ -183,7 +183,7 @@ struct CloudDriveView: View {
 
         return Button {
             HapticManager.shared.triggerImpact(style: .medium)
-            AudioPlayerManager.shared.play(track: track, in: queue)
+            TrackActions.playOrToggle(track, in: queue)
         } label: {
             TrackRow(
                 artwork: track.artworkKey,

@@ -89,6 +89,8 @@ struct ContentView: View {
 
     private var bottomBar: some View {
         VStack(spacing: 0) {
+            PlaybackErrorBanner()
+
             if status.hasTrack {
                 MiniPlayerView()
                     .padding(.horizontal, 10)
@@ -110,6 +112,54 @@ struct ContentView: View {
             )
             .ignoresSafeArea(edges: .bottom)
         )
+    }
+}
+
+// MARK: - Баннер ошибки воспроизведения
+
+/// Показывает понятное сообщение, если трек не удалось загрузить. Тап — скрыть.
+struct PlaybackErrorBanner: View {
+    @ObservedObject private var player = AudioPlayerManager.shared
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let message = player.playbackErrorMessage {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(Color(red: 1.0, green: 0.75, blue: 0.25))
+                    Text(message)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Palette.textTertiary)
+                        .padding(.top, 2)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Palette.backgroundRaised)
+                        .shadow(color: Color.black.opacity(0.4), radius: 14, x: 0, y: 6)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Palette.stroke, lineWidth: 1)
+                )
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    player.playbackErrorMessage = nil
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Скрыть сообщение")
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: player.playbackErrorMessage)
     }
 }
 

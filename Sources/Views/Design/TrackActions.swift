@@ -2,6 +2,20 @@ import Foundation
 
 /// Общие действия с треками, которые нужны на разных экранах
 enum TrackActions {
+    /// Тап по треку в списке: повторный тап по текущему треку ставит паузу/продолжает,
+    /// а не перезапускает его
+    static func playOrToggle(_ track: PlayerTrack, in queue: [PlayerTrack]) {
+        let player = AudioPlayerManager.shared
+        if player.currentTrack?.id == track.id && player.playbackState != .stopped {
+            if player.playbackState != .loading {
+                HapticManager.shared.triggerImpact(style: .light)
+                player.togglePlayPause()
+            }
+            return
+        }
+        player.play(track: track, in: queue)
+    }
+
     /// Можно ли скачать трек для офлайн-прослушивания
     static func canDownload(_ track: PlayerTrack) -> Bool {
         let downloads = DownloadManager.shared

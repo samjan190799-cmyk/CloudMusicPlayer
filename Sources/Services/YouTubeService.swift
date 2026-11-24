@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import YouTubeKit
 
 /// Модель трека с YouTube
@@ -71,6 +72,15 @@ class YouTubeService: ObservableObject {
     private var streamCache: [String: (url: URL, date: Date)] = [:]
     private let cacheLock = NSLock()
     private let streamTTL: TimeInterval = 3600 // 1 час (ссылки googlevideo живут от 2 до 6 часов)
+    // Ожидающие завершения извлечения (videoId -> колбэки), защищено cacheLock
+    private var pendingAudioRequests: [String: [(URL?) -> Void]] = [:]
+    // Последняя причина отказа YouTube по videoId (для диагностики и смоук-теста), защищено cacheLock
+    private var extractionFailureReasons: [String: String] = [:]
+
+    /// Причина, по которой YouTube не отдал поток (например, «Sign in to confirm you’re not a bot»)
+    func lastExtractionFailureReason(for videoId: String) -> String? {
+        cacheLock.withLock { extractionFailureReasons[videoId] }
+    }
 
     private init() {
         // Автоматически загружаем Чарты при старте приложения
@@ -107,7 +117,8 @@ class YouTubeService: ObservableObject {
 
     // MARK: - Нативное Извлечение Аудиопотока через YouTubeKit (InnerTube)
 
-    /// Получение прямого потока через нативный YouTubeKit с приоритетом на M4A / AAC (itag 140)
+    /// Получение прямого потока через нативный YouTubeKit с приоритетом на M4A / AAC (itag 140).
+    /// Одновременные запросы одного videoId (плеер, кэш, предзагрузка) объединяются в одно извлечение.
     func getAudioURL(for videoId: String, completion: @escaping (URL?) -> Void) {
         // 1. Проверка локального кэша
         if let cached = getCachedAudioURL(for: videoId) {
@@ -116,66 +127,231 @@ class YouTubeService: ObservableObject {
             return
         }
 
+        // 2. Если извлечение уже идёт — просто ждём его результата
+        let isAlreadyRunning: Bool = cacheLock.withLock {
+            if pendingAudioRequests[videoId] != nil {
+                pendingAudioRequests[videoId]?.append(completion)
+                return true
+            }
+            pendingAudioRequests[videoId] = [completion]
+            return false
+        }
+        if isAlreadyRunning { return }
+
         Task {
-            // 2. Извлечение потока через нативный YouTubeKit с таймаутом 8 секунд
-            let resolvedURL: URL? = await withTaskGroup(of: URL?.self) { group -> URL? in
-                // Таск 1: Запрос через YouTubeKit
-                group.addTask {
-                    do {
-                        let video = YouTube(videoID: videoId)
-                        let streams = try await video.streams
-                        let audioOnly = streams.filterAudioOnly()
-                        let playableOnly = audioOnly.filter { $0.isNativelyPlayable }
-
-                        // 1. Приоритет: Нативный M4A с максимальным битрейтом (itag 140/128kbps AAC)
-                        if let m4a = playableOnly.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() {
-                            return m4a.url
-                        }
-                        // 2. Вторичный приоритет: Playable MP4
-                        if let mp4 = playableOnly.filter({ $0.fileExtension == .mp4 }).highestAudioBitrateStream() {
-                            return mp4.url
-                        }
-                        // 3. Любой нативно воспроизводимый аудиопоток
-                        if let anyPlayable = playableOnly.highestAudioBitrateStream() {
-                            return anyPlayable.url
-                        }
-                        // 4. Поток из общего списка только-аудио с m4a
-                        if let m4aFallback = audioOnly.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() {
-                            return m4aFallback.url
-                        }
-                        // 5. Комбинированный аудио+видео MP4 поток как крайний вариант
-                        let combined = streams.filterVideoAndAudio().filter { $0.fileExtension == .mp4 }
-                        return combined.first?.url
-                    } catch {
-                        print("YouTubeService: Ошибка YouTubeKit streams: \(error.localizedDescription)")
-                        return nil
-                    }
-                }
-
-                // Таск 2: Защитный таймаут 8 секунд
-                group.addTask {
-                    try? await Task.sleep(nanoseconds: 8_000_000_000)
-                    return nil
-                }
-
-                for await url in group {
-                    if let u = url {
-                        group.cancelAll()
-                        return u
-                    }
-                }
-                return nil
+            // 1. YouTubeKit (web/visionOS клиенты + дешифровка подписи)
+            var resolvedURL = await self.extractAudioURL(for: videoId, timeout: 20)
+            if resolvedURL != nil {
+                print("YouTubeService: ✅ Аудио URL через YouTubeKit: \(videoId)")
+            } else {
+                // 2. Официальные клипы лейблов YouTubeKit часто не отдаёт (extractError) —
+                //    запрашиваем плеер InnerTube напрямую клиентами, которые возвращают готовые ссылки
+                resolvedURL = await self.fetchAudioURLViaInnerTubePlayer(videoId: videoId)
             }
 
             if let finalURL = resolvedURL {
                 self.setCachedAudioURL(finalURL, for: videoId)
-                print("YouTubeService: ✅ Извлечен нативный аудио URL через YouTubeKit: \(videoId)")
-                completion(finalURL)
             } else {
                 print("YouTubeService: ❌ Не удалось извлечь аудио URL для \(videoId)")
-                completion(nil)
+            }
+
+            let waiters = self.cacheLock.withLock {
+                self.pendingAudioRequests.removeValue(forKey: videoId) ?? []
+            }
+            waiters.forEach { $0(resolvedURL) }
+        }
+    }
+
+    /// Одна попытка извлечения с гарантированным таймаутом: результат отдаётся тем, кто успел первым
+    /// (YouTubeKit может не реагировать на отмену, поэтому не ждём его внутри task group)
+    private func extractAudioURL(for videoId: String, timeout: TimeInterval) async -> URL? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<URL?, Never>) in
+            let gate = ResumeGate(continuation)
+
+            let extraction = Task {
+                do {
+                    let streams = try await YouTube(videoID: videoId).streams
+                    gate.resume(with: YouTubeService.bestAudioStreamURL(from: streams))
+                } catch {
+                    print("YouTubeService: Ошибка YouTubeKit streams: \(error)")
+                    gate.resume(with: nil)
+                }
+            }
+
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                if gate.resume(with: nil) {
+                    print("YouTubeService: ⏱ Таймаут извлечения потока \(videoId)")
+                    extraction.cancel()
+                }
             }
         }
+    }
+
+    /// Потокобезопасно возобновляет continuation ровно один раз
+    private final class ResumeGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<URL?, Never>?
+
+        init(_ continuation: CheckedContinuation<URL?, Never>) {
+            self.continuation = continuation
+        }
+
+        /// - Returns: `true`, если именно этот вызов возобновил continuation
+        @discardableResult
+        func resume(with url: URL?) -> Bool {
+            lock.lock()
+            let pending = continuation
+            continuation = nil
+            lock.unlock()
+            pending?.resume(returning: url)
+            return pending != nil
+        }
+    }
+
+    // MARK: - Резервное извлечение через InnerTube /player
+
+    private struct PlayerClient {
+        let name: String
+        let id: Int
+        let version: String
+        let userAgent: String
+        let extraContext: [String: Any]
+    }
+
+    /// Клиенты, которым YouTube отдаёт прямые ссылки без шифрования подписи и без PO-токена
+    private static let fallbackPlayerClients: [PlayerClient] = [
+        PlayerClient(
+            name: "ANDROID_VR",
+            id: 28,
+            version: "1.65.10",
+            userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+            extraContext: ["androidSdkVersion": 32, "deviceMake": "Oculus", "deviceModel": "Quest 3", "osName": "Android", "osVersion": "12L"]
+        ),
+        PlayerClient(
+            name: "IOS",
+            id: 5,
+            version: "20.10.4",
+            userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+            extraContext: ["deviceMake": "Apple", "deviceModel": "iPhone16,2", "osName": "iPhone", "osVersion": "18.3.2.22D82"]
+        )
+    ]
+
+    private func fetchAudioURLViaInnerTubePlayer(videoId: String) async -> URL? {
+        for client in Self.fallbackPlayerClients {
+            if let url = await requestPlayer(videoId: videoId, client: client) {
+                print("YouTubeService: ✅ Аудио URL через InnerTube \(client.name): \(videoId)")
+                return url
+            }
+        }
+        return nil
+    }
+
+    private func requestPlayer(videoId: String, client: PlayerClient) async -> URL? {
+        guard let url = URL(string: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false") else { return nil }
+
+        var clientContext: [String: Any] = [
+            "clientName": client.name,
+            "clientVersion": client.version,
+            "hl": "en",
+            "gl": "US"
+        ]
+        clientContext.merge(client.extraContext) { current, _ in current }
+
+        let payload: [String: Any] = [
+            "context": ["client": clientContext],
+            "videoId": videoId,
+            "contentCheckOk": true,
+            "racyCheckOk": true
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(client.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(String(client.id), forHTTPHeaderField: "X-YouTube-Client-Name")
+        request.setValue(client.version, forHTTPHeaderField: "X-YouTube-Client-Version")
+        if let visitorData = UserDefaults.standard.string(forKey: "com.samvel.cloudmusicplayer.visitorData") {
+            request.setValue(visitorData, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard status == 200,
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("YouTubeService: InnerTube \(client.name) HTTP \(status) для \(videoId)")
+                return nil
+            }
+
+            let playability = root["playabilityStatus"] as? [String: Any]
+            let playabilityStatus = playability?["status"] as? String ?? "?"
+            guard playabilityStatus == "OK" else {
+                let reason = playability?["reason"] as? String ?? ""
+                print("YouTubeService: InnerTube \(client.name) → \(playabilityStatus) \(reason) для \(videoId)")
+                cacheLock.withLock { extractionFailureReasons[videoId] = "\(playabilityStatus): \(reason)" }
+                return nil
+            }
+
+            if let details = root["videoDetails"] as? [String: Any],
+               let returnedId = details["videoId"] as? String, returnedId != videoId {
+                print("YouTubeService: InnerTube \(client.name) вернул чужое видео \(returnedId)")
+                return nil
+            }
+
+            guard let streaming = root["streamingData"] as? [String: Any] else {
+                print("YouTubeService: InnerTube \(client.name) без streamingData для \(videoId)")
+                return nil
+            }
+
+            return Self.bestDirectAudioURL(from: streaming)
+        } catch {
+            print("YouTubeService: InnerTube \(client.name) ошибка: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Лучший AAC-поток (audio/mp4) с прямой ссылкой; иначе прогрессивный MP4 (itag 18)
+    private static func bestDirectAudioURL(from streaming: [String: Any]) -> URL? {
+        let adaptive = streaming["adaptiveFormats"] as? [[String: Any]] ?? []
+        let audioMP4 = adaptive
+            .filter { ($0["mimeType"] as? String)?.hasPrefix("audio/mp4") == true && $0["url"] is String }
+            .filter { format in
+                // Пропускаем дублированные/автопереведённые дорожки, если YouTube их помечает
+                guard let track = format["audioTrack"] as? [String: Any] else { return true }
+                return (track["audioIsDefault"] as? Bool) ?? true
+            }
+            .sorted { ($0["bitrate"] as? Int ?? 0) > ($1["bitrate"] as? Int ?? 0) }
+        if let best = audioMP4.first, let urlString = best["url"] as? String {
+            return URL(string: urlString)
+        }
+
+        let progressive = streaming["formats"] as? [[String: Any]] ?? []
+        if let mp4 = progressive.first(where: { ($0["mimeType"] as? String)?.hasPrefix("video/mp4") == true && $0["url"] is String }),
+           let urlString = mp4["url"] as? String {
+            return URL(string: urlString)
+        }
+        return nil
+    }
+
+    private static func bestAudioStreamURL(from streams: [YouTubeKit.Stream]) -> URL? {
+        let audioOnly = streams.filterAudioOnly()
+        let playableOnly = audioOnly.filter { $0.isNativelyPlayable }
+
+        // 1. Нативный M4A с максимальным битрейтом (itag 140 / 128 kbps AAC)
+        if let m4a = playableOnly.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() {
+            return m4a.url
+        }
+        // 2. Любой нативно воспроизводимый аудиопоток
+        if let anyPlayable = playableOnly.highestAudioBitrateStream() {
+            return anyPlayable.url
+        }
+        // 3. Комбинированный аудио+видео MP4 поток как крайний вариант (AVPlayer играет его звук)
+        let combined = streams.filterVideoAndAudio().filter { $0.isNativelyPlayable && $0.fileExtension == .mp4 }
+        return combined.lowestResolutionStream()?.url ?? combined.first?.url
     }
 
     /// Получение прямого видеопотока для захвата обложки или предварительного просмотра
@@ -355,7 +531,7 @@ class YouTubeService: ObservableObject {
                     if !innerTube.tracks.isEmpty {
                         self.tracks = innerTube.tracks
                         self.continuationToken = innerTube.nextToken
-                        self.canLoadMore = innerTube.nextToken != nil || innerTube.tracks.count >= 15
+                        self.canLoadMore = innerTube.nextToken != nil
                         self.errorMessage = nil
                     } else {
                         self.tracks = []
@@ -387,7 +563,9 @@ class YouTubeService: ObservableObject {
             if let innerTube = await self.searchInnerTube(query: query, continuationToken: token) {
                 await MainActor.run {
                     self.isLoading = false
-                    self.tracks.append(contentsOf: innerTube.tracks)
+                    // YouTube иногда повторяет видео между страницами — дубликаты ломают ForEach
+                    let existing = Set(self.tracks.map(\.id))
+                    self.tracks.append(contentsOf: innerTube.tracks.filter { !existing.contains($0.id) })
                     self.continuationToken = innerTube.nextToken
                     self.canLoadMore = innerTube.nextToken != nil
                 }
@@ -430,7 +608,7 @@ class YouTubeService: ObservableObject {
             "context": [
                 "client": [
                     "clientName": "WEB",
-                    "clientVersion": "2.20240101.00.00",
+                    "clientVersion": "2.20260708.00.00",
                     "hl": "ru",
                     "gl": "RU"
                 ]
@@ -441,6 +619,7 @@ class YouTubeService: ObservableObject {
             payload["continuation"] = token
         } else {
             payload["query"] = query
+            payload["params"] = "EgIQAQ==" // Фильтр «Только видео»: без каналов, плейлистов и шортсов-подборок
         }
         
         guard let bodyData = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
@@ -550,6 +729,8 @@ class YouTubeService: ObservableObject {
         if let lengthObj = v["lengthText"] as? [String: Any], let s = lengthObj["simpleText"] as? String {
             durationSeconds = parseDurationString(s)
         }
+        // Прямые эфиры и премьеры без длительности нельзя проиграть как аудиофайл
+        guard durationSeconds > 0 else { return nil }
         
         let thumbUrl = "https://img.youtube.com/vi/\(videoId)/hqdefault.jpg"
         

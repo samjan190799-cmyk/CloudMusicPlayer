@@ -148,7 +148,7 @@ struct PlaylistDetailView: View {
                     LazyVStack(spacing: 2) {
                         ForEach(Array(playlist.tracks.enumerated()), id: \.element.id) { index, track in
                             row(track: track, playerTrack: queue[index]) {
-                                AudioPlayerManager.shared.play(track: queue[index], in: queue)
+                                TrackActions.playOrToggle(queue[index], in: queue)
                             }
                         }
                     }

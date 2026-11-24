@@ -153,7 +153,9 @@ struct ExploreView: View {
             }
 
             if tracks.isEmpty {
-                loadingOrEmpty(isLoading: service.isTrendingLoading, message: "Не удалось загрузить чарт. Потяните позже или выберите другой регион.")
+                loadingOrEmpty(isLoading: service.isTrendingLoading, message: "Проверьте интернет или выберите другой регион.") {
+                    service.fetchTrendingMusic()
+                }
             } else {
                 SectionHeader(title: "Топ недели", subtitle: service.selectedRegion.title)
 
@@ -381,10 +383,9 @@ struct ExploreView: View {
 
             if tracks.isEmpty {
                 if let error = service.errorMessage, !service.isLoading {
-                    Text(error)
-                        .font(.appSubheadline)
-                        .foregroundColor(Palette.textSecondary)
-                        .padding(.horizontal, Metrics.screenPadding)
+                    loadingOrEmpty(isLoading: false, message: error) {
+                        service.search(query: trimmedQuery)
+                    }
                 } else if !service.isLoading {
                     Text("Нажмите «Найти» на клавиатуре, чтобы искать онлайн")
                         .font(.appSubheadline)
@@ -392,22 +393,28 @@ struct ExploreView: View {
                         .padding(.horizontal, Metrics.screenPadding)
                 }
             } else {
-                trackList(tracks, queue: queue, showsDuration: true)
-
-                if service.canLoadMore {
-                    Button {
-                        service.loadMore()
-                    } label: {
-                        HStack {
-                            if service.isLoading {
-                                ProgressView()
+                LazyVStack(spacing: 2) {
+                    ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+                        onlineRow(track, playerTrack: queue[index], showsDuration: true) {
+                            play(queue[index], in: queue)
+                        }
+                        .onAppear {
+                            // Бесконечная прокрутка: догружаем следующую страницу у конца списка
+                            if track.id == tracks.last?.id && service.canLoadMore && !service.isLoading {
+                                service.loadMore()
                             }
-                            Text("Показать ещё")
                         }
                     }
-                    .buttonStyle(SecondaryCapsuleButtonStyle())
-                    .padding(.horizontal, Metrics.screenPadding)
-                    .disabled(service.isLoading)
+                }
+                .padding(.horizontal, Metrics.screenPadding)
+
+                if service.isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(.vertical, 12)
+                        Spacer()
+                    }
                 }
             }
         }
@@ -533,7 +540,7 @@ struct ExploreView: View {
     }
 
     @ViewBuilder
-    private func loadingOrEmpty(isLoading: Bool, message: String) -> some View {
+    private func loadingOrEmpty(isLoading: Bool, message: String, retry: (() -> Void)? = nil) -> some View {
         if isLoading {
             HStack {
                 Spacer()
@@ -541,6 +548,14 @@ struct ExploreView: View {
                     .padding(.vertical, 40)
                 Spacer()
             }
+        } else if let retry = retry {
+            EmptyStateView(
+                icon: "wifi.exclamationmark",
+                title: "Не получилось загрузить",
+                message: message,
+                actionTitle: "Повторить",
+                action: retry
+            )
         } else {
             Text(message)
                 .font(.appSubheadline)
@@ -566,7 +581,7 @@ struct ExploreView: View {
 
     private func play(_ track: PlayerTrack, in queue: [PlayerTrack]) {
         HapticManager.shared.triggerImpact(style: .medium)
-        AudioPlayerManager.shared.play(track: track, in: queue)
+        TrackActions.playOrToggle(track, in: queue)
     }
 }
 

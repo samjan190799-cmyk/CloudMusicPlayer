@@ -6,6 +6,10 @@
 * **Клиент YouTubeKit & InnerTube:** Всегда использовать исключительно прямое воспроизведение через нативный `YouTubeKit` (M4A / 128kbps AAC) и поиск через нативный InnerTube API без промежуточных серверов или зеркал. Инициализировать клиентские сессии с сохранением и регулярным обновлением visitor data (`X-Goog-Visitor-Id`).
 * **Фоновое воспроизведение (Screen Off):** Использовать буфер `preferredForwardBufferDuration = 30.0` и политику `AVAudioSessionRouteSharingPolicy.longFormAudio`. Отслеживать `AVPlayerItemPlaybackStalled` для защиты от сбоев соединения.
 * **Обработка обложек:** Качество обложек YouTube запрашивать по цепочке fallback: `maxresdefault` (проверяя ширину > 120px) -> `hqdefault` -> `mqdefault` -> `sddefault`. Кешировать изображения через `ThumbnailCache` (`Views/Design/Artwork.swift`).
+* **Заголовки googlevideo:** Не подменять `User-Agent`/`X-Goog-Visitor-Id` для запросов YouTubeKit и для потоков googlevideo — ссылки подписаны под клиент, выбранный YouTubeKit. Глобальный `URLProtocol`-перехватчик удалён именно по этой причине.
+* **Формат файлов:** Расширение скачанных/кэшированных файлов определять по сигнатуре (`AudioFileSniffer`): YouTube отдаёт M4A, и AVPlayer не открывает его под расширением `.mp3`.
+* **Резерв для клипов лейблов:** Если YouTubeKit возвращает `extractError` (типично для официальных музыкальных клипов), `YouTubeService` сам запрашивает InnerTube `/player` клиентами ANDROID_VR → IOS и берёт прямую ссылку `audio/mp4`. Проверяется смоук-тестом `Tools/YouTubeSmokeTest` (workflow «YouTube Smoke Test»).
+* **Ошибки воспроизведения:** понятное сообщение кладётся в `AudioPlayerManager.playbackErrorMessage` — его показывает баннер над мини-плеером.
 
 ## 2. Дизайн-система «Aurora» (тёмная, обложка в центре)
 * **Токены:** цвета, шрифты, отступы и стили кнопок — только из `Views/Design/Theme.swift` (`Palette`, `Font.app*`, `Metrics`, `PressableButtonStyle`, `PrimaryCapsuleButtonStyle`). Не хардкодить новые цвета на экранах.

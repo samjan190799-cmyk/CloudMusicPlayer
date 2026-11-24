@@ -60,7 +60,7 @@ struct DownloadsView: View {
                         LazyVStack(spacing: 2) {
                             ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
                                 row(track, playerTrack: queue[index]) {
-                                    AudioPlayerManager.shared.play(track: queue[index], in: queue)
+                                    TrackActions.playOrToggle(queue[index], in: queue)
                                 }
                             }
                         }

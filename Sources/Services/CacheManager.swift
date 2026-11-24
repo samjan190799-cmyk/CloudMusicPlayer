@@ -96,6 +96,19 @@ class CacheManager: NSObject, ObservableObject {
         }
     }
     
+    /// Удаление повреждённого/невоспроизводимого файла из кэша
+    func removeCachedTrack(trackId: String) {
+        DispatchQueue.main.async {
+            guard let item = self.metadata[trackId] else { return }
+            let fileURL = self.cacheURL.appendingPathComponent(item.relativePath)
+            try? FileManager.default.removeItem(at: fileURL)
+            self.metadata.removeValue(forKey: trackId)
+            self.cachedTrackIds.remove(trackId)
+            self.saveMetadata()
+            print("CacheManager: 🗑 Удалён невоспроизводимый кэш для \(trackId)")
+        }
+    }
+    
     /// Проверка, кэширован ли файл
     func isCached(trackId: String) -> Bool {
         return cachedTrackIds.contains(trackId)
@@ -162,15 +175,24 @@ extension CacheManager: URLSessionDownloadDelegate {
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let taskDescription = downloadTask.taskDescription else { return }
-        let components = taskDescription.split(separator: "|")
+        let components = taskDescription.components(separatedBy: "|")
         guard components.count >= 4 else { return }
         
-        let trackId = String(components[0])
-        let title = String(components[1])
-        let sourceRaw = String(components[2])
-        let size = Int64(components[3]) ?? 0
+        // Название может содержать «|» (частое для YouTube), поэтому id берём с начала, а источник и размер — с конца
+        let trackId = components[0]
+        let title = components[1..<(components.count - 2)].joined(separator: "|")
+        let sourceRaw = components[components.count - 2]
+        let size = Int64(components[components.count - 1]) ?? 0
         
-        let fileExtension = "mp3"
+        guard AudioFileSniffer.isSuccessfulDownload(downloadTask) else {
+            print("CacheManager: ❌ Сервер вернул ошибку при кэшировании \(trackId), файл отброшен")
+            DispatchQueue.main.async {
+                self.downloadTasks.removeValue(forKey: trackId)
+            }
+            return
+        }
+        
+        let fileExtension = AudioFileSniffer.fileExtension(for: location)
         let safeFileName = "\(trackId.uuidCompatible).\(fileExtension)"
         let destinationURL = cacheURL.appendingPathComponent(safeFileName)
         
